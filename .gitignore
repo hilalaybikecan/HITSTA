@@ -1,1 +1,28 @@
+# Data files (users upload their own)
+*.xlsx
+*.xls
+*.csv
+
+# HITSTA data files (large)
+AX_*.txt
+ID_*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.egg-info/
+
+# Old / local folders
 /old
+/spin coating/
+/Blade coating/
