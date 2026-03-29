@@ -383,7 +383,7 @@ if plot_category == "Reflectance":
             y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
             y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
             y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="r_single_smooth")
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_single_smooth")
         with col2:
             rounds_to_plot = range(round_range[0], round_range[1] + 1)
             colors = get_sequential_colors(len(rounds_to_plot))
@@ -420,7 +420,7 @@ if plot_category == "Reflectance":
             y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
             y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
             y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="r_multi_smooth")
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_multi_smooth")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
