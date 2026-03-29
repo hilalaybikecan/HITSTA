@@ -371,9 +371,9 @@ def apply_time_skip(times, *arrays, skip_range=None):
 from plotly.subplots import make_subplots
 
 if plot_category == "Reflectance":
-    tab_single, tab_multi, tab_bes, tab_sws, tab_rss = st.tabs([
+    tab_single, tab_multi, tab_bes, tab_rss = st.tabs([
         "Single Cell", "Multi Cell", "Band-edge Slope vs Time",
-        "Short-WL Step vs Time", "R Self-Similarity vs Time"])
+        "R Self-Similarity vs Time"])
 
     with tab_single:
         col1, col2 = st.columns([1, 3])
@@ -388,29 +388,32 @@ if plot_category == "Reflectance":
             y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
             y_range = (y_min, y_max_val)
             smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_single_smooth")
-            show_bandedge = st.checkbox("Show band-edge fit region", value=False, key="r_single_be")
+            show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
         with col2:
             rounds_to_plot = range(round_range[0], round_range[1] + 1)
             colors = get_sequential_colors(len(rounds_to_plot))
             fig = go.Figure()
+            be_wl = exp[selected_id]["Bandedge"][0]
+            wl_arr = exp[selected_id]["Wavelengths"]
+            be_idx = int(np.argmin(np.abs(wl_arr - be_wl)))
             for i, rnd in enumerate(rounds_to_plot):
                 if rnd < len(exp[selected_id]["Reflectance"]):
                     refl_y = exp[selected_id]["Reflectance"][rnd].copy()
                     if smooth_sigma > 0:
                         refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
                     fig.add_trace(go.Scatter(
-                        x=exp[selected_id]["Wavelengths"],
+                        x=wl_arr,
                         y=refl_y,
                         mode='lines', name=f"Round {int(rnd)}",
                         line=dict(color=colors[i], width=2.5)))
-            if show_bandedge:
-                be_wl, be_r = exp[selected_id]["Bandedge"]
-                be_wl_start, be_wl_end = exp[selected_id]["Bandedge Fit WL Range"]
-                fig.add_vrect(x0=be_wl_start, x1=be_wl_end,
-                              fillcolor="rgba(255,180,0,0.12)", line_width=0)
-                fig.add_vline(x=be_wl, line_dash="dash", line_color="orange", line_width=1.5,
-                              annotation_text=f"BE: {be_wl:.0f} nm",
-                              annotation_position="top right")
+                    if show_bandedge:
+                        fig.add_trace(go.Scatter(
+                            x=[be_wl], y=[exp[selected_id]["Reflectance"][rnd][be_idx]],
+                            mode='markers',
+                            marker=dict(color=colors[i], size=9, symbol='circle-open',
+                                        line=dict(width=2.5)),
+                            showlegend=False,
+                            hovertemplate=f"Round {int(rnd)}: {exp[selected_id]['Reflectance'][rnd][be_idx]:.3f}<extra></extra>"))
             fig.update_layout(
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
@@ -476,28 +479,6 @@ if plot_category == "Reflectance":
                 xaxis_title="Time (h)", yaxis_title="Band-edge slope",
                 height=500, template="plotly_white",
                 title="Band-edge slope vs Time")
-            st.plotly_chart(fig, use_container_width=True)
-
-    with tab_sws:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_sws = st.checkbox("Select All", key="r_sws_all")
-            if select_all_sws:
-                st.session_state["r_sws_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_sws_cells")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["Short-Wavelength Step"], skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t, y=y,
-                    mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="Short-Wavelength Step",
-                height=500, template="plotly_white",
-                title="Short-Wavelength Step vs Time")
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_rss:
@@ -803,7 +784,6 @@ elif plot_category == "Conditions":
                     "Band-edge slope (last)",
                     "PL Peak Intensity (initial)",
                     "PL Peak Intensity (last)",
-                    "Short-Wavelength Step (last)",
                 ], key="cond_metric")
                 excluded = st.multiselect("Exclude IDs", all_ids, key="cond_exclude")
             with col2:
@@ -817,8 +797,6 @@ elif plot_category == "Conditions":
                         val = exp[sid]["PL Peak Intensity"][0]
                     elif metric == "PL Peak Intensity (last)":
                         val = exp[sid]["PL Peak Intensity"][-1]
-                    elif metric == "Short-Wavelength Step (last)":
-                        val = exp[sid]["Short-Wavelength Step"][-1]
                     data_list.append({"Condition": condition_map[sid], metric: val, "ID": sid})
 
                 if data_list:
@@ -873,8 +851,6 @@ elif plot_category == "Correlations":
             "PL Self-Similarity — Final":        float(exp[sid]["PL Self-Similarity"][-1]),
             "Band-edge Slope — Initial (raw)":   float(exp[sid]["R_slopes (raw)"][0]),
             "Band-edge Slope — Final (norm.)":   float(exp[sid]["R_slopes (norm.)"][-1]),
-            "Short-WL Step — Initial":           float(exp[sid]["Short-Wavelength Step"][0]),
-            "Short-WL Step — Final":             float(exp[sid]["Short-Wavelength Step"][-1]),
             "R Self-Similarity — Final":         float(exp[sid]["R Self-Similarity"][-1]),
             "Duration (h)":                      float(exp[sid]["Times"][-1]) if len(exp[sid]["Times"]) > 0 else np.nan,
         }
@@ -931,7 +907,6 @@ with st.expander("Summary Table"):
             "PL Peak Init.": f"{exp[sid]['PL Peak Intensity'][0]:.2f}",
             "PL Peak Final": f"{exp[sid]['PL Peak Intensity'][-1]:.2f}",
             "BES Final": f"{exp[sid]['R_slopes (norm.)'][-1]:.3f}",
-            "SWS Final": f"{exp[sid]['Short-Wavelength Step'][-1]:.3f}",
         }
         summary_rows.append(row)
     st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
