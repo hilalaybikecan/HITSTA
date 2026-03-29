@@ -210,6 +210,10 @@ def import_HITSTA(file_contents_list, _version=3):
         exp[IDstring]["Rmid"] = Rmid
 
         bandedge_interval = 100
+        exp[IDstring]["Bandedge Fit WL Range"] = (
+            wavelengths_cut[max(index_bandedge - bandedge_interval, 0)],
+            wavelengths_cut[min(index_bandedge + bandedge_interval, len(wavelengths_cut)) - 1]
+        )
         R_slopes = []
         for Refl in exp[IDstring]["Reflectance"]:
             x = wavelengths_cut[max([(index_bandedge - bandedge_interval), 0]):min(
@@ -384,6 +388,7 @@ if plot_category == "Reflectance":
             y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
             y_range = (y_min, y_max_val)
             smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_single_smooth")
+            show_bandedge = st.checkbox("Show band-edge fit region", value=False, key="r_single_be")
         with col2:
             rounds_to_plot = range(round_range[0], round_range[1] + 1)
             colors = get_sequential_colors(len(rounds_to_plot))
@@ -398,6 +403,14 @@ if plot_category == "Reflectance":
                         y=refl_y,
                         mode='lines', name=f"Round {int(rnd)}",
                         line=dict(color=colors[i], width=2.5)))
+            if show_bandedge:
+                be_wl, be_r = exp[selected_id]["Bandedge"]
+                be_wl_start, be_wl_end = exp[selected_id]["Bandedge Fit WL Range"]
+                fig.add_vrect(x0=be_wl_start, x1=be_wl_end,
+                              fillcolor="rgba(255,180,0,0.12)", line_width=0)
+                fig.add_vline(x=be_wl, line_dash="dash", line_color="orange", line_width=1.5,
+                              annotation_text=f"BE: {be_wl:.0f} nm",
+                              annotation_position="top right")
             fig.update_layout(
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
@@ -410,9 +423,8 @@ if plot_category == "Reflectance":
         with col1:
             select_all_r_multi = st.checkbox("Select All", key="r_multi_all")
             if select_all_r_multi:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
+                st.session_state["r_multi_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
             wl_min = st.number_input("WL min (nm)", value=550, step=10, key="r_multi_wl_min")
             wl_max = st.number_input("WL max (nm)", value=800, step=10, key="r_multi_wl_max")
@@ -446,9 +458,8 @@ if plot_category == "Reflectance":
         with col1:
             select_all_bes = st.checkbox("Select All", key="r_bes_all")
             if select_all_bes:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_bes_cells")
+                st.session_state["r_bes_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_bes_cells")
             normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
         with col2:
             colors = get_colors(len(selected_ids))
@@ -472,9 +483,8 @@ if plot_category == "Reflectance":
         with col1:
             select_all_sws = st.checkbox("Select All", key="r_sws_all")
             if select_all_sws:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_sws_cells")
+                st.session_state["r_sws_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_sws_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -495,9 +505,8 @@ if plot_category == "Reflectance":
         with col1:
             select_all_rss = st.checkbox("Select All", key="r_rss_all")
             if select_all_rss:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_rss_cells")
+                st.session_state["r_rss_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_rss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -633,9 +642,8 @@ elif plot_category == "PL":
         with col1:
             select_all_pl_multi = st.checkbox("Select All", key="pl_multi_all")
             if select_all_pl_multi:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_multi_cells")
+                st.session_state["pl_multi_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="pl_multi_rnd")
             wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
             wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
@@ -685,9 +693,8 @@ elif plot_category == "PL":
         with col1:
             select_all_pl_int = st.checkbox("Select All", key="pl_int_all")
             if select_all_pl_int:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_int_cells")
+                st.session_state["pl_int_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_int_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -736,9 +743,8 @@ elif plot_category == "PL":
         with col1:
             select_all_pl_pss = st.checkbox("Select All", key="pl_pss_all")
             if select_all_pl_pss:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_pss_cells")
+                st.session_state["pl_pss_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_pss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -759,18 +765,20 @@ elif plot_category == "PL":
         with col1:
             select_all_pl_bg = st.checkbox("Select All", key="pl_bg_all")
             if select_all_pl_bg:
-                selected_ids = all_ids
-            else:
-                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_bg_cells")
+                st.session_state["pl_bg_cells"] = all_ids
+            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_bg_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
             for i, sid in enumerate(selected_ids):
                 peak_wls = exp[sid]["PL Peak Wavelength"]
-                # avoid division by zero
+                fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                peak_wls = peak_wls[:cutoff]
+                times_sid = exp[sid]["Times"][:cutoff]
                 valid = peak_wls > 0
                 bandgaps = np.where(valid, 1240.0 / np.where(valid, peak_wls, 1), np.nan)
-                t, bg = apply_time_skip(exp[sid]["Times"], bandgaps, skip_range=skip_range)
+                t, bg = apply_time_skip(times_sid, bandgaps, skip_range=skip_range)
                 fig.add_trace(go.Scatter(
                     x=t, y=bg,
                     mode='lines+markers', name=get_label(sid),
