@@ -527,26 +527,18 @@ elif plot_category == "PL":
             times = exp[selected_id]["Times"]
             n_rounds = len(times)
             wl_mask = (wl >= wl_range[0]) & (wl <= wl_range[1])
-
-            # ── Round range slider ──
-            max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
-            round_range = st.slider("Round range", 0, max_round, (0, max_round), key="pl_all_rr")
-            r0_idx = min(round_range[0], n_rounds - 1)
-            r1_idx = min(round_range[1], n_rounds - 1)
-            st.caption(f"Rounds {round_range[0]}–{round_range[1]}  →  "
-                       f"{times[r0_idx]:.2f} h – {times[r1_idx]:.2f} h")
-
-            # ── Single-round highlight slider ──
-            round_idx = st.slider("Highlight round", 0, n_rounds - 1, 0,
-                                  format="Round %d", key="pl_time_rnd")
-            t_current = times[round_idx]
             peak_wls = exp[selected_id]["PL Peak Wavelength"]
-            st.caption(f"Round {int(exp[selected_id]['Rounds'][round_idx])}  →  "
-                       f"{t_current:.2f} h  |  peak = {peak_wls[round_idx]:.1f} nm")
 
-            # ── PL spectra plot ──
-            rounds_to_plot = range(round_range[0], round_range[1] + 1)
-            colors = get_sequential_colors(len(rounds_to_plot))
+            # ── Single slider: show rounds 0 → selected ──
+            max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
+            round_idx = st.slider("Round", 0, max_round, max_round, key="pl_all_rr")
+            t_current = times[min(round_idx, n_rounds - 1)]
+            st.caption(f"Round {round_idx}  →  {t_current:.2f} h  |  "
+                       f"peak = {peak_wls[min(round_idx, n_rounds - 1)]:.1f} nm")
+
+            # ── PL spectra plot (rounds 0 … round_idx) ──
+            rounds_to_plot = range(0, round_idx + 1)
+            colors = get_sequential_colors(max(round_idx + 1, 2))
             fig = go.Figure()
             y_max = 0
             for i, rnd in enumerate(rounds_to_plot):
@@ -564,10 +556,11 @@ elif plot_category == "PL":
                             mode='lines', name=f"Fit {int(rnd)}",
                             line=dict(color=colors[i], width=1.5, dash='dash'),
                             showlegend=False))
-            if show_peak_wl and round_idx < len(peak_wls) and peak_wls[round_idx] > 0:
-                fig.add_vline(x=peak_wls[round_idx], line_dash="dash",
+            cur = min(round_idx, n_rounds - 1)
+            if show_peak_wl and peak_wls[cur] > 0:
+                fig.add_vline(x=peak_wls[cur], line_dash="dash",
                               line_color="red", line_width=1.5,
-                              annotation_text=f"{peak_wls[round_idx]:.1f} nm",
+                              annotation_text=f"{peak_wls[cur]:.1f} nm",
                               annotation_position="top right")
             layout_kwargs = dict(
                 xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
@@ -588,11 +581,11 @@ elif plot_category == "PL":
                 line=dict(color='#555', width=1.5), marker=dict(size=4),
                 name="PL Peak Wavelength"))
             fig2.add_trace(go.Scatter(
-                x=[t_current], y=[peak_wls[round_idx]],
+                x=[t_current], y=[peak_wls[cur]],
                 mode='markers', marker=dict(size=12, color='red', symbol='circle'),
                 showlegend=False,
-                hovertemplate=f"Round {int(exp[selected_id]['Rounds'][round_idx])}: "
-                              f"{peak_wls[round_idx]:.1f} nm<extra></extra>"))
+                hovertemplate=f"Round {int(exp[selected_id]['Rounds'][cur])}: "
+                              f"{peak_wls[cur]:.1f} nm<extra></extra>"))
             fig2.update_layout(
                 xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
                 height=220, template="plotly_white",
