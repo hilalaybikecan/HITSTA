@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from io import StringIO
 from scipy import stats
+from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 from scipy.special import gammainc, gamma
 import plotly.graph_objects as go
@@ -376,19 +377,27 @@ if plot_category == "Reflectance":
             selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="r_single_cell")
             max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
             round_range = st.slider("Round range", 0, max_round, (0, max_round), key="r_single_rr")
-            wl_range = st.slider("Wavelength range (nm)", 400, 1100, (650, 850), key="r_single_wl")
-            y_range = st.slider("Y range", 0.0, 2.0, (0.0, 0.8), step=0.05, key="r_single_yr")
+            wl_min = st.number_input("WL min (nm)", value=650, step=10, key="r_single_wl_min")
+            wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_single_wl_max")
+            wl_range = (wl_min, wl_max)
+            y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
+            y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
+            y_range = (y_min, y_max_val)
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="r_single_smooth")
         with col2:
             rounds_to_plot = range(round_range[0], round_range[1] + 1)
             colors = get_sequential_colors(len(rounds_to_plot))
             fig = go.Figure()
             for i, rnd in enumerate(rounds_to_plot):
                 if rnd < len(exp[selected_id]["Reflectance"]):
+                    refl_y = exp[selected_id]["Reflectance"][rnd].copy()
+                    if smooth_sigma > 0:
+                        refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
                     fig.add_trace(go.Scatter(
                         x=exp[selected_id]["Wavelengths"],
-                        y=exp[selected_id]["Reflectance"][rnd],
+                        y=refl_y,
                         mode='lines', name=f"Round {int(rnd)}",
-                        line=dict(color=colors[i], width=1.5)))
+                        line=dict(color=colors[i], width=2.5)))
             fig.update_layout(
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
@@ -399,20 +408,32 @@ if plot_category == "Reflectance":
     with tab_multi:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
+            select_all_r_multi = st.checkbox("Select All", key="r_multi_all")
+            if select_all_r_multi:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
-            wl_range = st.slider("Wavelength range (nm)", 400, 1100, (550, 800), key="r_multi_wl")
-            y_range = st.slider("Y range", 0.0, 2.0, (0.0, 1.0), step=0.05, key="r_multi_yr")
+            wl_min = st.number_input("WL min (nm)", value=550, step=10, key="r_multi_wl_min")
+            wl_max = st.number_input("WL max (nm)", value=800, step=10, key="r_multi_wl_max")
+            wl_range = (wl_min, wl_max)
+            y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
+            y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
+            y_range = (y_min, y_max_val)
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0.0, value=0.0, step=1.0, format="%.0f", key="r_multi_smooth")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
             for i, sid in enumerate(selected_ids):
                 rnd = min(int(round_num), len(exp[sid]["Reflectance"]) - 1)
+                refl_y = exp[sid]["Reflectance"][rnd].copy()
+                if smooth_sigma > 0:
+                    refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
                 fig.add_trace(go.Scatter(
                     x=exp[sid]["Wavelengths"],
-                    y=exp[sid]["Reflectance"][rnd],
+                    y=refl_y,
                     mode='lines', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.5)))
+                    line=dict(color=colors[i], width=2.5)))
             fig.update_layout(
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
@@ -423,7 +444,11 @@ if plot_category == "Reflectance":
     with tab_bes:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_bes_cells")
+            select_all_bes = st.checkbox("Select All", key="r_bes_all")
+            if select_all_bes:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_bes_cells")
             normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
         with col2:
             colors = get_colors(len(selected_ids))
@@ -445,7 +470,11 @@ if plot_category == "Reflectance":
     with tab_sws:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_sws_cells")
+            select_all_sws = st.checkbox("Select All", key="r_sws_all")
+            if select_all_sws:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_sws_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -464,7 +493,11 @@ if plot_category == "Reflectance":
     with tab_rss:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_rss_cells")
+            select_all_rss = st.checkbox("Select All", key="r_rss_all")
+            if select_all_rss:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_rss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -481,18 +514,22 @@ if plot_category == "Reflectance":
             st.plotly_chart(fig, use_container_width=True)
 
 elif plot_category == "PL":
-    tab_single, tab_multi, tab_intensity, tab_twin, tab_pss = st.tabs([
+    tab_single, tab_multi, tab_intensity, tab_twin, tab_pss, tab_bandgap = st.tabs([
         "Single Cell", "Multi Cell", "PL Peak Intensity vs Time",
-        "PL + Band-edge Slope", "PL Self-Similarity vs Time"])
+        "PL + Band-edge Slope", "PL Self-Similarity vs Time", "PL Bandgap vs Time"])
 
     with tab_single:
         col1, col2 = st.columns([1, 3])
         with col1:
             selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_single_cell")
-            wl_range = st.slider("Wavelength range (nm)", 400, 1100, (600, 900), key="pl_single_wl")
+            wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_single_wl_min")
+            wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_single_wl_max")
+            wl_range = (wl_min, wl_max)
             auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_auto_y")
             if not auto_y:
-                y_range = st.slider("Y range", -1.0, 50.0, (-0.5, 5.0), step=0.5, key="pl_y")
+                y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_y_min")
+                y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_y_max")
+                y_range = (y_min_pl, y_max_pl)
             show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_fit")
         with col2:
             tab_all, tab_time = st.tabs(["All Rounds", "Single Round (time slider)"])
@@ -594,12 +631,20 @@ elif plot_category == "PL":
     with tab_multi:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_multi_cells")
+            select_all_pl_multi = st.checkbox("Select All", key="pl_multi_all")
+            if select_all_pl_multi:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="pl_multi_rnd")
-            wl_range = st.slider("Wavelength range (nm)", 400, 1100, (600, 900), key="pl_multi_wl")
+            wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
+            wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
+            wl_range = (wl_min, wl_max)
             auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_multi_auto_y")
             if not auto_y:
-                y_range = st.slider("Y range", -1.0, 50.0, (-0.5, 5.0), step=0.5, key="pl_multi_y")
+                y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_multi_y_min")
+                y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_multi_y_max")
+                y_range = (y_min_pl, y_max_pl)
             show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_multi_fit")
         with col2:
             colors = get_colors(len(selected_ids))
@@ -638,7 +683,11 @@ elif plot_category == "PL":
     with tab_intensity:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_int_cells")
+            select_all_pl_int = st.checkbox("Select All", key="pl_int_all")
+            if select_all_pl_int:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_int_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -685,7 +734,11 @@ elif plot_category == "PL":
     with tab_pss:
         col1, col2 = st.columns([1, 3])
         with col1:
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_pss_cells")
+            select_all_pl_pss = st.checkbox("Select All", key="pl_pss_all")
+            if select_all_pl_pss:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_pss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -699,6 +752,34 @@ elif plot_category == "PL":
                 xaxis_title="Time (h)", yaxis_title="PL Self-Similarity",
                 height=500, template="plotly_white",
                 title="PL Self-Similarity vs Time")
+            st.plotly_chart(fig, use_container_width=True)
+
+    with tab_bandgap:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            select_all_pl_bg = st.checkbox("Select All", key="pl_bg_all")
+            if select_all_pl_bg:
+                selected_ids = all_ids
+            else:
+                selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_bg_cells")
+        with col2:
+            colors = get_colors(len(selected_ids))
+            fig = go.Figure()
+            for i, sid in enumerate(selected_ids):
+                peak_wls = exp[sid]["PL Peak Wavelength"]
+                # avoid division by zero
+                valid = peak_wls > 0
+                bandgaps = np.where(valid, 1240.0 / np.where(valid, peak_wls, 1), np.nan)
+                t, bg = apply_time_skip(exp[sid]["Times"], bandgaps, skip_range=skip_range)
+                fig.add_trace(go.Scatter(
+                    x=t, y=bg,
+                    mode='lines+markers', name=get_label(sid),
+                    line=dict(color=colors[i], width=1.75),
+                    marker=dict(size=3)))
+            fig.update_layout(
+                xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
+                height=500, template="plotly_white",
+                title="PL Bandgap vs Time  (E = 1240 / λ_peak)")
             st.plotly_chart(fig, use_container_width=True)
 
 elif plot_category == "Conditions":

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m pip install streamlit)",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/Scripts/streamlit.exe run:*)",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m streamlit run app.py)",
+      "Bash(taskkill /F /IM python.exe /T)",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m pip install plotly openpyxl)"
+    ]
+  }
+}
