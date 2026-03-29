@@ -334,7 +334,7 @@ def get_label(id_str):
 
 # ── Plot Selection ──
 st.sidebar.header("3. Plot Category")
-plot_category = st.sidebar.radio("Category", ["Reflectance", "PL", "Conditions"], horizontal=True)
+plot_category = st.sidebar.radio("Category", ["Reflectance", "PL", "Conditions", "Correlations"], horizontal=True)
 
 # ── Sidebar: Time Skip ──
 st.sidebar.header("4. Time Skip (optional)")
@@ -850,6 +850,74 @@ elif plot_category == "Conditions":
                 st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
             else:
                 st.info("No cells matched to conditions.")
+
+elif plot_category == "Correlations":
+    def _cell_metrics(sid):
+        fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+        cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+        peak_wls_valid = exp[sid]["PL Peak Wavelength"][:cutoff]
+        bg_init = 1240.0 / exp[sid]["PL Peak Wavelength"][0] if exp[sid]["PL Peak Wavelength"][0] > 0 else np.nan
+        bg_final = (1240.0 / peak_wls_valid[-1]) if len(peak_wls_valid) > 0 and peak_wls_valid[-1] > 0 else np.nan
+        amp_init = float(fit_amps[0]) if len(fit_amps) > 0 else np.nan
+        amp_final = float(fit_amps[cutoff - 1]) if cutoff > 0 else np.nan
+        return {
+            "PL Peak WL — Initial (nm)":        float(exp[sid]["PL Peak Wavelength"][0]),
+            "PL Peak WL — Final (nm)":           float(exp[sid]["PL Peak Wavelength"][-1]),
+            "PL Peak WL Shift (nm)":             float(exp[sid]["PL Peak Wavelength"][-1] - exp[sid]["PL Peak Wavelength"][0]),
+            "Bandgap — Initial (eV)":            bg_init,
+            "Bandgap — Final (eV)":              bg_final,
+            "Bandgap Shift (eV)":                (bg_final - bg_init) if not (np.isnan(bg_init) or np.isnan(bg_final)) else np.nan,
+            "PL Amplitude — Initial":            amp_init,
+            "PL Amplitude — Final (valid)":      amp_final,
+            "PL Amplitude Ratio (final/initial)": amp_final / amp_init if (amp_init and amp_init != 0) else np.nan,
+            "PL Self-Similarity — Final":        float(exp[sid]["PL Self-Similarity"][-1]),
+            "Band-edge Slope — Initial (raw)":   float(exp[sid]["R_slopes (raw)"][0]),
+            "Band-edge Slope — Final (norm.)":   float(exp[sid]["R_slopes (norm.)"][-1]),
+            "Short-WL Step — Initial":           float(exp[sid]["Short-Wavelength Step"][0]),
+            "Short-WL Step — Final":             float(exp[sid]["Short-Wavelength Step"][-1]),
+            "R Self-Similarity — Final":         float(exp[sid]["R Self-Similarity"][-1]),
+            "Duration (h)":                      float(exp[sid]["Times"][-1]) if len(exp[sid]["Times"]) > 0 else np.nan,
+        }
+
+    metrics_df = pd.DataFrame(
+        [{"ID": sid, "Condition": condition_map.get(sid, sid), **_cell_metrics(sid)} for sid in all_ids]
+    )
+    metric_cols = [c for c in metrics_df.columns if c not in ("ID", "Condition")]
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        x_metric = st.selectbox("X axis", metric_cols, index=0, key="corr_x")
+        y_metric = st.selectbox("Y axis", metric_cols, index=1, key="corr_y")
+        color_by = st.radio("Color by", ["Cell ID", "Condition"], key="corr_color", horizontal=True)
+        excluded_corr = st.multiselect("Exclude IDs", all_ids, key="corr_exclude")
+    with col2:
+        df_plot = metrics_df[~metrics_df["ID"].isin(excluded_corr)].dropna(subset=[x_metric, y_metric])
+        color_col = "Condition" if color_by == "Condition" else "ID"
+        fig = px.scatter(
+            df_plot, x=x_metric, y=y_metric,
+            color=color_col, text="ID",
+            hover_data={"ID": True, "Condition": True,
+                        x_metric: ":.4f", y_metric: ":.4f"},
+            template="plotly_white", height=550,
+            title=f"{y_metric}  vs  {x_metric}"
+        )
+        fig.update_traces(textposition="top center", marker=dict(size=10))
+        fig.update_layout(xaxis_title=x_metric, yaxis_title=y_metric)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Pearson correlation of every metric vs the chosen X
+        st.subheader(f"Pearson correlations vs  {x_metric}")
+        corr_rows = []
+        for col in metric_cols:
+            if col == x_metric:
+                continue
+            clean = metrics_df[~metrics_df["ID"].isin(excluded_corr)].dropna(subset=[x_metric, col])
+            if len(clean) > 2 and clean[x_metric].std() > 0 and clean[col].std() > 0:
+                r, p = stats.pearsonr(clean[x_metric], clean[col])
+                corr_rows.append({"Parameter": col, "r": round(r, 3), "p": round(p, 4), "n": len(clean)})
+        if corr_rows:
+            corr_table = pd.DataFrame(corr_rows).sort_values("r", key=lambda s: s.abs(), ascending=False)
+            st.dataframe(corr_table, use_container_width=True, hide_index=True)
 
 # ── Data Table ──
 with st.expander("Summary Table"):
