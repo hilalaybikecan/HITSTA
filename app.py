@@ -759,6 +759,8 @@ elif plot_category == "Conditions":
                     "Band-edge slope (last)",
                     "PL Peak Intensity (initial)",
                     "PL Peak Intensity (last)",
+                    "Bandgap — Initial (eV)",
+                    "Bandgap — Final (eV)",
                 ], key="cond_metric")
                 excluded = st.multiselect("Exclude IDs", all_ids, key="cond_exclude")
             with col2:
@@ -772,6 +774,14 @@ elif plot_category == "Conditions":
                         val = exp[sid]["PL Peak Intensity"][0]
                     elif metric == "PL Peak Intensity (last)":
                         val = exp[sid]["PL Peak Intensity"][-1]
+                    elif metric == "Bandgap — Initial (eV)":
+                        wl0 = exp[sid]["PL Peak Wavelength"][0]
+                        val = 1240.0 / wl0 if wl0 > 0 else np.nan
+                    elif metric == "Bandgap — Final (eV)":
+                        fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                        cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                        peak_wls_v = exp[sid]["PL Peak Wavelength"][:cutoff]
+                        val = (1240.0 / peak_wls_v[-1]) if len(peak_wls_v) > 0 and peak_wls_v[-1] > 0 else np.nan
                     data_list.append({"Condition": condition_map[sid], metric: val, "ID": sid})
 
                 if data_list:
