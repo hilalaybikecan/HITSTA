@@ -8,7 +8,12 @@
       "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m pip install plotly openpyxl)",
       "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -c \"import ast; ast.parse\\(open\\(''app.py''\\).read\\(\\)\\); print\\(''syntax OK''\\)\")",
       "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m streamlit run app.py --server.headless true)",
-      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -c \":*)"
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -c \":*)",
+      "Bash(python -c \"import app\")",
+      "Bash(python -c \":*)",
+      "Bash(timeout 10 streamlit run app.py --server.headless true --server.port 8502)",
+      "Bash(timeout 10 streamlit run app.py --server.headless true --server.port 8503)",
+      "Bash(netstat -ano)"
     ]
   }
 }
