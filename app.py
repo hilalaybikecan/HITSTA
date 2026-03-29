@@ -521,102 +521,84 @@ elif plot_category == "PL":
                 y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_y_max")
                 y_range = (y_min_pl, y_max_pl)
             show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_fit")
+            show_peak_wl = st.checkbox("Show peak wavelength", value=False, key="pl_show_peak")
         with col2:
-            tab_all, tab_time = st.tabs(["All Rounds", "Single Round (time slider)"])
-
             wl = exp[selected_id]["Wavelengths"]
             times = exp[selected_id]["Times"]
+            n_rounds = len(times)
             wl_mask = (wl >= wl_range[0]) & (wl <= wl_range[1])
 
-            with tab_all:
-                max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
-                round_range = st.slider("Round range", 0, max_round, (0, max_round), key="pl_all_rr")
-                rounds_to_plot = range(round_range[0], round_range[1] + 1)
-                colors = get_sequential_colors(len(rounds_to_plot))
-                fig = go.Figure()
-                y_max = 0
-                for i, rnd in enumerate(rounds_to_plot):
-                    if rnd < len(exp[selected_id]["PL Subtr"]):
-                        y_data = exp[selected_id]["PL Subtr"][rnd]
-                        if np.any(wl_mask):
-                            y_max = max(y_max, np.max(y_data[wl_mask]))
-                        fig.add_trace(go.Scatter(
-                            x=wl, y=y_data,
-                            mode='lines', name=f"Round {int(rnd)}",
-                            line=dict(color=colors[i], width=1.5)))
-                        if show_fit and rnd < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][rnd] is not None:
-                            fig.add_trace(go.Scatter(
-                                x=wl, y=exp[selected_id]["PL Fitted"][rnd],
-                                mode='lines', name=f"Fit {int(rnd)}",
-                                line=dict(color=colors[i], width=1.5, dash='dash'),
-                                showlegend=False))
-                layout_kwargs = dict(
-                    xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
-                    xaxis_range=list(wl_range),
-                    height=500, template="plotly_white",
-                    title=f"PL Spectra - {get_label(selected_id)}")
-                if auto_y:
-                    layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1] if y_max > 0 else None
-                else:
-                    layout_kwargs["yaxis_range"] = list(y_range)
-                fig.update_layout(**layout_kwargs)
-                st.plotly_chart(fig, use_container_width=True)
+            # ── Round range slider ──
+            max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
+            round_range = st.slider("Round range", 0, max_round, (0, max_round), key="pl_all_rr")
+            r0_idx = min(round_range[0], n_rounds - 1)
+            r1_idx = min(round_range[1], n_rounds - 1)
+            st.caption(f"Rounds {round_range[0]}–{round_range[1]}  →  "
+                       f"{times[r0_idx]:.2f} h – {times[r1_idx]:.2f} h")
 
-            with tab_time:
-                n_rounds = len(times)
-                round_idx = st.slider("Time point", 0, n_rounds - 1, 0, format="Round %d", key="pl_time_rnd")
-                t_current = times[round_idx]
-                st.caption(f"Time = {t_current:.2f} h  |  Round {int(exp[selected_id]['Rounds'][round_idx])}")
+            # ── Single-round highlight slider ──
+            round_idx = st.slider("Highlight round", 0, n_rounds - 1, 0,
+                                  format="Round %d", key="pl_time_rnd")
+            t_current = times[round_idx]
+            peak_wls = exp[selected_id]["PL Peak Wavelength"]
+            st.caption(f"Round {int(exp[selected_id]['Rounds'][round_idx])}  →  "
+                       f"{t_current:.2f} h  |  peak = {peak_wls[round_idx]:.1f} nm")
 
-                pl = exp[selected_id]["PL Subtr"][round_idx]
-                if np.any(wl_mask) and np.max(pl[wl_mask]) > 0:
-                    peak_wl = wl[wl_mask][np.argmax(pl[wl_mask])]
-                else:
-                    peak_wl = wl[np.argmax(pl)]
-
-                if auto_y:
-                    all_pl = exp[selected_id]["PL Subtr"]
-                    y_max_auto = np.max(all_pl[:, wl_mask]) if np.any(wl_mask) else np.max(all_pl)
-                    computed_y_range = [-y_max_auto * 0.05, y_max_auto * 1.1]
-                else:
-                    computed_y_range = list(y_range)
-
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=wl, y=pl, mode='lines', name="Data",
-                    line=dict(color='#01153E', width=2)))
-                if show_fit and round_idx < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][round_idx] is not None:
-                    fit_y = exp[selected_id]["PL Fitted"][round_idx]
-                    pars = exp[selected_id]["PL Fit Parameters"][round_idx]
+            # ── PL spectra plot ──
+            rounds_to_plot = range(round_range[0], round_range[1] + 1)
+            colors = get_sequential_colors(len(rounds_to_plot))
+            fig = go.Figure()
+            y_max = 0
+            for i, rnd in enumerate(rounds_to_plot):
+                if rnd < len(exp[selected_id]["PL Subtr"]):
+                    y_data = exp[selected_id]["PL Subtr"][rnd]
+                    if np.any(wl_mask):
+                        y_max = max(y_max, np.max(y_data[wl_mask]))
                     fig.add_trace(go.Scatter(
-                        x=wl, y=fit_y, mode='lines', name="Gaussian fit",
-                        line=dict(color='red', width=2, dash='dash')))
-                    if not np.isnan(pars[1]):
-                        st.caption(f"Fit: peak = {pars[1]:.1f} nm, width = {pars[2]:.1f} nm, amplitude = {pars[0]:.2f}")
-                fig.add_vline(x=peak_wl, line_dash="dash", line_color="red", line_width=1.5,
-                              annotation_text=f"{peak_wl:.1f} nm", annotation_position="top right")
-                fig.update_layout(
-                    xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
-                    xaxis_range=list(wl_range), yaxis_range=computed_y_range,
-                    height=500, template="plotly_white",
-                    title=f"PL Spectrum - {get_label(selected_id)} @ {t_current:.2f} h")
-                st.plotly_chart(fig, use_container_width=True)
+                        x=wl, y=y_data,
+                        mode='lines', name=f"Round {int(rnd)}",
+                        line=dict(color=colors[i], width=1.5)))
+                    if show_fit and rnd < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][rnd] is not None:
+                        fig.add_trace(go.Scatter(
+                            x=wl, y=exp[selected_id]["PL Fitted"][rnd],
+                            mode='lines', name=f"Fit {int(rnd)}",
+                            line=dict(color=colors[i], width=1.5, dash='dash'),
+                            showlegend=False))
+            if show_peak_wl and round_idx < len(peak_wls) and peak_wls[round_idx] > 0:
+                fig.add_vline(x=peak_wls[round_idx], line_dash="dash",
+                              line_color="red", line_width=1.5,
+                              annotation_text=f"{peak_wls[round_idx]:.1f} nm",
+                              annotation_position="top right")
+            layout_kwargs = dict(
+                xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
+                xaxis_range=list(wl_range),
+                height=480, template="plotly_white",
+                title=f"PL Spectra - {get_label(selected_id)}")
+            if auto_y:
+                layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1] if y_max > 0 else None
+            else:
+                layout_kwargs["yaxis_range"] = list(y_range)
+            fig.update_layout(**layout_kwargs)
+            st.plotly_chart(fig, use_container_width=True)
 
-                peak_wls = exp[selected_id]["PL Peak Wavelength"]
-                fig2 = go.Figure()
-                fig2.add_trace(go.Scatter(
-                    x=times, y=peak_wls, mode='lines+markers',
-                    line=dict(color='#555', width=1.5), marker=dict(size=4),
-                    name="PL Peak Wavelength"))
-                fig2.add_trace(go.Scatter(
-                    x=[t_current], y=[peak_wls[round_idx]],
-                    mode='markers', marker=dict(size=12, color='red', symbol='circle'),
-                    name="Current", showlegend=False))
-                fig2.update_layout(
-                    xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
-                    height=250, template="plotly_white",
-                    title="PL Peak Wavelength Shift")
-                st.plotly_chart(fig2, use_container_width=True)
+            # ── Peak wavelength vs time ──
+            fig2 = go.Figure()
+            fig2.add_trace(go.Scatter(
+                x=times, y=peak_wls, mode='lines+markers',
+                line=dict(color='#555', width=1.5), marker=dict(size=4),
+                name="PL Peak Wavelength"))
+            fig2.add_trace(go.Scatter(
+                x=[t_current], y=[peak_wls[round_idx]],
+                mode='markers', marker=dict(size=12, color='red', symbol='circle'),
+                showlegend=False,
+                hovertemplate=f"Round {int(exp[selected_id]['Rounds'][round_idx])}: "
+                              f"{peak_wls[round_idx]:.1f} nm<extra></extra>"))
+            fig2.update_layout(
+                xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
+                height=220, template="plotly_white",
+                title="PL Peak Wavelength vs Time",
+                margin=dict(t=40, b=40))
+            st.plotly_chart(fig2, use_container_width=True)
 
     with tab_multi:
         col1, col2 = st.columns([1, 3])
