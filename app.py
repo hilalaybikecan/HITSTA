@@ -302,6 +302,7 @@ st.sidebar.success(f"Loaded {len(all_ids)} cells: {', '.join(all_ids)}")
 
 # ── Build condition lookup ──
 condition_map = {}
+cond_col = "Condition"
 if df_conditions is not None:
     cols = list(df_conditions.columns)
 
@@ -661,14 +662,16 @@ elif plot_category == "PL":
             # ── Peak wavelength vs time ──
             fig2 = go.Figure()
             for i, sid in enumerate(selected_ids):
-                t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Peak Wavelength"],
+                fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                t, y = apply_time_skip(exp[sid]["Times"][:cutoff], exp[sid]["PL Peak Wavelength"][:cutoff],
                                        skip_range=skip_range)
                 fig2.add_trace(go.Scatter(
                     x=t, y=y, mode='lines+markers', name=get_label(sid),
                     line=dict(color=colors[i], width=1.5), marker=dict(size=3)))
                 if show_fit_peak:
-                    fit_peak = exp[sid]["PL Fit Parameters"][:, 1]
-                    t_fit, y_fit = apply_time_skip(exp[sid]["Times"], fit_peak,
+                    fit_peak = exp[sid]["PL Fit Parameters"][:cutoff, 1]
+                    t_fit, y_fit = apply_time_skip(exp[sid]["Times"][:cutoff], fit_peak,
                                                    skip_range=skip_range)
                     valid = ~np.isnan(y_fit)
                     if np.any(valid):
@@ -831,7 +834,8 @@ elif plot_category == "Conditions":
                     df_plot = pd.DataFrame(data_list)
                     fig = px.box(df_plot, x="Condition", y=metric, points="all",
                                  hover_data=["ID"], template="plotly_white")
-                    fig.update_layout(height=500, title=f"{metric} by Condition")
+                    fig.update_layout(height=500, title=f"{metric} by {cond_col}",
+                                      xaxis_title=cond_col)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("No matching data for box plot.")

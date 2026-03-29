@@ -13,7 +13,8 @@
       "Bash(python -c \":*)",
       "Bash(timeout 10 streamlit run app.py --server.headless true --server.port 8502)",
       "Bash(timeout 10 streamlit run app.py --server.headless true --server.port 8503)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app.py''\\).read\\(\\)\\); print\\(''OK''\\)\")"
     ]
   }
 }
