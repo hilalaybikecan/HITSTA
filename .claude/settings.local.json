@@ -5,7 +5,10 @@
       "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/Scripts/streamlit.exe run:*)",
       "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m streamlit run app.py)",
       "Bash(taskkill /F /IM python.exe /T)",
-      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m pip install plotly openpyxl)"
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m pip install plotly openpyxl)",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -c \"import ast; ast.parse\\(open\\(''app.py''\\).read\\(\\)\\); print\\(''syntax OK''\\)\")",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -m streamlit run app.py --server.headless true)",
+      "Bash(C:/Users/can/AppData/Local/miniconda3/envs/hitsta/python.exe -c \":*)"
     ]
   }
 }
