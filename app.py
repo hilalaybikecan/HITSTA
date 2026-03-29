@@ -610,6 +610,7 @@ elif plot_category == "PL":
                 y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_multi_y_max")
                 y_range = (y_min_pl, y_max_pl)
             show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_multi_fit")
+            show_fit_peak = st.checkbox("Show fit peak wavelength", value=False, key="pl_multi_show_peak")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -632,10 +633,18 @@ elif plot_category == "PL":
                         mode='lines', name=f"{get_label(sid)} fit",
                         line=dict(color=colors[i], width=1.5, dash='dash'),
                         showlegend=False))
+                if show_fit_peak and rnd < len(exp[sid]["PL Fit Parameters"]):
+                    peak_nm = exp[sid]["PL Fit Parameters"][rnd, 1]
+                    if not np.isnan(peak_nm) and peak_nm > 0:
+                        fig.add_vline(x=peak_nm, line_color=colors[i],
+                                      line_dash="dot", line_width=1.5,
+                                      annotation_text=f"{peak_nm:.1f}",
+                                      annotation_font_color=colors[i],
+                                      annotation_position="top left")
             layout_kwargs = dict(
                 xaxis_title="Wavelength (nm)", yaxis_title="PL intensity",
                 xaxis_range=list(wl_range),
-                height=500, template="plotly_white",
+                height=460, template="plotly_white",
                 title=f"PL comparison - Round {int(round_num)}")
             if auto_y:
                 layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1]
@@ -643,6 +652,32 @@ elif plot_category == "PL":
                 layout_kwargs["yaxis_range"] = list(y_range)
             fig.update_layout(**layout_kwargs)
             st.plotly_chart(fig, use_container_width=True)
+
+            # ── Peak wavelength vs time ──
+            fig2 = go.Figure()
+            for i, sid in enumerate(selected_ids):
+                t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Peak Wavelength"],
+                                       skip_range=skip_range)
+                fig2.add_trace(go.Scatter(
+                    x=t, y=y, mode='lines+markers', name=get_label(sid),
+                    line=dict(color=colors[i], width=1.5), marker=dict(size=3)))
+                if show_fit_peak:
+                    fit_peak = exp[sid]["PL Fit Parameters"][:, 1]
+                    t_fit, y_fit = apply_time_skip(exp[sid]["Times"], fit_peak,
+                                                   skip_range=skip_range)
+                    valid = ~np.isnan(y_fit)
+                    if np.any(valid):
+                        fig2.add_trace(go.Scatter(
+                            x=t_fit[valid], y=y_fit[valid],
+                            mode='lines', name=f"{get_label(sid)} fit peak",
+                            line=dict(color=colors[i], width=1.5, dash='dot'),
+                            showlegend=False))
+            fig2.update_layout(
+                xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
+                height=220, template="plotly_white",
+                title="PL Peak Wavelength vs Time",
+                margin=dict(t=40, b=40))
+            st.plotly_chart(fig2, use_container_width=True)
 
     with tab_intensity:
         col1, col2 = st.columns([1, 3])
