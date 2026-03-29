@@ -296,6 +296,7 @@ if not uploaded_files:
 
 exp = import_HITSTA(uploaded_files)
 all_ids = list(exp.keys())
+default_ids = [sid for sid in all_ids if sid not in ("ID1", "ID2")][:5]
 
 st.sidebar.success(f"Loaded {len(all_ids)} cells: {', '.join(all_ids)}")
 
@@ -425,9 +426,10 @@ if plot_category == "Reflectance":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_r_multi = st.checkbox("Select All", key="r_multi_all")
-            if select_all_r_multi:
+            if select_all_r_multi and not st.session_state.get("r_multi_all_prev", False):
                 st.session_state["r_multi_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
+            st.session_state["r_multi_all_prev"] = select_all_r_multi
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
             wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_multi_wl_min")
             wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_multi_wl_max")
@@ -460,9 +462,10 @@ if plot_category == "Reflectance":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_bes = st.checkbox("Select All", key="r_bes_all")
-            if select_all_bes:
+            if select_all_bes and not st.session_state.get("r_bes_all_prev", False):
                 st.session_state["r_bes_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_bes_cells")
+            st.session_state["r_bes_all_prev"] = select_all_bes
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_bes_cells")
             normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
         with col2:
             colors = get_colors(len(selected_ids))
@@ -485,9 +488,10 @@ if plot_category == "Reflectance":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_rss = st.checkbox("Select All", key="r_rss_all")
-            if select_all_rss:
+            if select_all_rss and not st.session_state.get("r_rss_all_prev", False):
                 st.session_state["r_rss_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_rss_cells")
+            st.session_state["r_rss_all_prev"] = select_all_rss
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_rss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -597,9 +601,10 @@ elif plot_category == "PL":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_pl_multi = st.checkbox("Select All", key="pl_multi_all")
-            if select_all_pl_multi:
+            if select_all_pl_multi and not st.session_state.get("pl_multi_all_prev", False):
                 st.session_state["pl_multi_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_multi_cells")
+            st.session_state["pl_multi_all_prev"] = select_all_pl_multi
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="pl_multi_rnd")
             wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
             wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
@@ -683,9 +688,10 @@ elif plot_category == "PL":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_pl_int = st.checkbox("Select All", key="pl_int_all")
-            if select_all_pl_int:
+            if select_all_pl_int and not st.session_state.get("pl_int_all_prev", False):
                 st.session_state["pl_int_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_int_cells")
+            st.session_state["pl_int_all_prev"] = select_all_pl_int
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_int_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -733,9 +739,10 @@ elif plot_category == "PL":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_pl_pss = st.checkbox("Select All", key="pl_pss_all")
-            if select_all_pl_pss:
+            if select_all_pl_pss and not st.session_state.get("pl_pss_all_prev", False):
                 st.session_state["pl_pss_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_pss_cells")
+            st.session_state["pl_pss_all_prev"] = select_all_pl_pss
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_pss_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -755,9 +762,10 @@ elif plot_category == "PL":
         col1, col2 = st.columns([1, 3])
         with col1:
             select_all_pl_bg = st.checkbox("Select All", key="pl_bg_all")
-            if select_all_pl_bg:
+            if select_all_pl_bg and not st.session_state.get("pl_bg_all_prev", False):
                 st.session_state["pl_bg_cells"] = all_ids
-            selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="pl_bg_cells")
+            st.session_state["pl_bg_all_prev"] = select_all_pl_bg
+            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_bg_cells")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
