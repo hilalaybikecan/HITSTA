@@ -700,6 +700,7 @@ elif plot_category == "PL":
                 title="PL Peak Wavelength vs Time",
                 margin=dict(t=40, b=40), **_FONT)
             st.plotly_chart(fig2, use_container_width=True)
+            st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position can be extracted beyond that point.")
 
     with tab_intensity:
         col1, col2 = st.columns([1, 3])
@@ -809,6 +810,7 @@ elif plot_category == "PL":
                 height=500, template="plotly_white",
                 title="PL Bandgap vs Time  (E = 1240 / λ_peak)", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
+            st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position (and therefore no valid bandgap) can be extracted beyond that point.")
 
 elif plot_category == "Conditions":
     if not condition_map:
