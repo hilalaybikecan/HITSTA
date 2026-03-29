@@ -381,13 +381,13 @@ if plot_category == "Reflectance":
             selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="r_single_cell")
             max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
             round_range = st.slider("Round range", 0, max_round, (0, max_round), key="r_single_rr")
-            wl_min = st.number_input("WL min (nm)", value=650, step=10, key="r_single_wl_min")
+            wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_single_wl_min")
             wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_single_wl_max")
             wl_range = (wl_min, wl_max)
             y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
             y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
             y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_single_smooth")
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_single_smooth")
             show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
         with col2:
             rounds_to_plot = range(round_range[0], round_range[1] + 1)
@@ -410,7 +410,7 @@ if plot_category == "Reflectance":
                         fig.add_trace(go.Scatter(
                             x=[be_wl], y=[exp[selected_id]["Reflectance"][rnd][be_idx]],
                             mode='markers',
-                            marker=dict(color=colors[i], size=9, symbol='circle-open',
+                            marker=dict(color='black', size=9, symbol='circle-open',
                                         line=dict(width=2.5)),
                             showlegend=False,
                             hovertemplate=f"Round {int(rnd)}: {exp[selected_id]['Reflectance'][rnd][be_idx]:.3f}<extra></extra>"))
@@ -429,13 +429,13 @@ if plot_category == "Reflectance":
                 st.session_state["r_multi_cells"] = all_ids
             selected_ids = st.multiselect("Cells", all_ids, default=all_ids[:5], key="r_multi_cells")
             round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
-            wl_min = st.number_input("WL min (nm)", value=550, step=10, key="r_multi_wl_min")
-            wl_max = st.number_input("WL max (nm)", value=800, step=10, key="r_multi_wl_max")
+            wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_multi_wl_min")
+            wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_multi_wl_max")
             wl_range = (wl_min, wl_max)
             y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
             y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
             y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=0, step=1, key="r_multi_smooth")
+            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_multi_smooth")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
