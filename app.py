@@ -338,17 +338,6 @@ def get_label(id_str):
 st.sidebar.header("3. Plot Category")
 plot_category = st.sidebar.radio("Category", ["Reflectance", "PL", "Conditions", "Correlations"], horizontal=True)
 
-# ── Sidebar: Time Skip ──
-st.sidebar.header("4. Time Skip (optional)")
-enable_time_skip = st.sidebar.checkbox("Skip time range")
-skip_range = None
-if enable_time_skip:
-    skip_t_start = st.sidebar.number_input("Skip from (h)", value=0.0, step=0.5, format="%.2f")
-    skip_t_end = st.sidebar.number_input("Skip to (h)", value=1.0, step=0.5, format="%.2f")
-    if skip_t_start < skip_t_end:
-        skip_range = (skip_t_start, skip_t_end)
-    else:
-        st.sidebar.warning("'Skip from' must be less than 'Skip to'.")
 
 # ── Color palette ──
 def get_colors(n):
@@ -369,8 +358,25 @@ def apply_time_skip(times, *arrays, skip_range=None):
     return (times[mask],) + tuple(arr[mask] for arr in arrays)
 
 
+def _time_skip_ui(key_prefix):
+    """Render compact time-skip controls inline; return skip_range tuple or None."""
+    enable = st.checkbox("Skip time range", key=f"{key_prefix}_ts_en")
+    if enable:
+        c1, c2 = st.columns(2)
+        t_start = c1.number_input("From (h)", value=0.0, step=0.5, format="%.2f", key=f"{key_prefix}_ts_s")
+        t_end = c2.number_input("To (h)", value=1.0, step=0.5, format="%.2f", key=f"{key_prefix}_ts_e")
+        if t_start < t_end:
+            return (t_start, t_end)
+        st.warning("'From' must be less than 'To'.")
+    return None
+
+
+_FONT = dict(font=dict(size=14), title_font_size=16)
+
 # ── Plot Rendering ──
 from plotly.subplots import make_subplots
+
+skip_range = None  # default; overridden inline per-tab where relevant
 
 if plot_category == "Reflectance":
     tab_single, tab_multi, tab_bes, tab_rss = st.tabs([
@@ -420,7 +426,7 @@ if plot_category == "Reflectance":
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
                 height=500, template="plotly_white",
-                title=f"Reflectance - {get_label(selected_id)}")
+                title=f"Reflectance - {get_label(selected_id)}", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_multi:
@@ -456,7 +462,7 @@ if plot_category == "Reflectance":
                 xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                 xaxis_range=list(wl_range), yaxis_range=list(y_range),
                 height=500, template="plotly_white",
-                title=f"Reflectance comparison - Round {int(round_num)}")
+                title=f"Reflectance comparison - Round {int(round_num)}", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_bes:
@@ -468,6 +474,7 @@ if plot_category == "Reflectance":
             st.session_state["r_bes_all_prev"] = select_all_bes
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_bes_cells")
             normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
+            skip_range = _time_skip_ui("r_bes")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -482,7 +489,7 @@ if plot_category == "Reflectance":
             fig.update_layout(
                 xaxis_title="Time (h)", yaxis_title="Band-edge slope",
                 height=500, template="plotly_white",
-                title="Band-edge slope vs Time")
+                title="Band-edge slope vs Time", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_rss:
@@ -493,6 +500,7 @@ if plot_category == "Reflectance":
                 st.session_state["r_rss_cells"] = all_ids
             st.session_state["r_rss_all_prev"] = select_all_rss
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_rss_cells")
+            skip_range = _time_skip_ui("r_rss")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -505,7 +513,7 @@ if plot_category == "Reflectance":
             fig.update_layout(
                 xaxis_title="Time (h)", yaxis_title="R Self-Similarity",
                 height=500, template="plotly_white",
-                title="Reflectance Self-Similarity vs Time")
+                title="Reflectance Self-Similarity vs Time", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
 elif plot_category == "PL":
@@ -571,7 +579,7 @@ elif plot_category == "PL":
                 xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
                 xaxis_range=list(wl_range),
                 height=480, template="plotly_white",
-                title=f"PL Spectra - {get_label(selected_id)}")
+                title=f"PL Spectra - {get_label(selected_id)}", **_FONT)
             if auto_y:
                 layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1] if y_max > 0 else None
             else:
@@ -593,9 +601,9 @@ elif plot_category == "PL":
                               f"{peak_wls[cur]:.1f} nm<extra></extra>"))
             fig2.update_layout(
                 xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
-                height=220, template="plotly_white",
+                height=250, template="plotly_white",
                 title="PL Peak Wavelength vs Time",
-                margin=dict(t=40, b=40))
+                margin=dict(t=40, b=40), **_FONT)
             st.plotly_chart(fig2, use_container_width=True)
 
     with tab_multi:
@@ -606,7 +614,12 @@ elif plot_category == "PL":
                 st.session_state["pl_multi_cells"] = all_ids
             st.session_state["pl_multi_all_prev"] = select_all_pl_multi
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_multi_cells")
-            round_num = st.number_input("Round", min_value=0, value=0, key="pl_multi_rnd")
+            max_round_multi = max((int(exp[sid]["Rounds"][-1]) for sid in selected_ids if len(exp[sid]["Rounds"]) > 0), default=0)
+            round_num = st.slider("Round", 0, max(max_round_multi, 1), 0, key="pl_multi_rnd")
+            if selected_ids:
+                _ref = selected_ids[0]
+                _ref_rnd = min(round_num, len(exp[_ref]["Times"]) - 1)
+                st.caption(f"t ≈ {exp[_ref]['Times'][_ref_rnd]:.2f} h  (ref: {get_label(_ref)})")
             wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
             wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
             wl_range = (wl_min, wl_max)
@@ -617,6 +630,7 @@ elif plot_category == "PL":
                 y_range = (y_min_pl, y_max_pl)
             show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_multi_fit")
             show_fit_peak = st.checkbox("Show fit peak wavelength", value=False, key="pl_multi_show_peak")
+            skip_range = _time_skip_ui("pl_multi")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -651,7 +665,7 @@ elif plot_category == "PL":
                 xaxis_title="Wavelength (nm)", yaxis_title="PL intensity",
                 xaxis_range=list(wl_range),
                 height=460, template="plotly_white",
-                title=f"PL comparison - Round {int(round_num)}")
+                title=f"PL comparison - Round {int(round_num)}", **_FONT)
             if auto_y:
                 layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1]
             else:
@@ -682,9 +696,9 @@ elif plot_category == "PL":
                             showlegend=False))
             fig2.update_layout(
                 xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
-                height=220, template="plotly_white",
+                height=270, template="plotly_white",
                 title="PL Peak Wavelength vs Time",
-                margin=dict(t=40, b=40))
+                margin=dict(t=40, b=40), **_FONT)
             st.plotly_chart(fig2, use_container_width=True)
 
     with tab_intensity:
@@ -695,6 +709,7 @@ elif plot_category == "PL":
                 st.session_state["pl_int_cells"] = all_ids
             st.session_state["pl_int_all_prev"] = select_all_pl_int
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_int_cells")
+            skip_range = _time_skip_ui("pl_int")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -709,13 +724,14 @@ elif plot_category == "PL":
             fig.update_layout(
                 xaxis_title="Time (h)", yaxis_title="PL Peak Intensity",
                 height=500, template="plotly_white",
-                title="PL Peak Intensity vs Time")
+                title="PL Peak Intensity vs Time", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_twin:
         col1, col2 = st.columns([1, 3])
         with col1:
             selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_twin_cell")
+            skip_range = _time_skip_ui("pl_twin")
         with col2:
             fig = make_subplots(specs=[[{"secondary_y": True}]])
             t_bes, y_bes = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["R_slopes (norm.)"], skip_range=skip_range)
@@ -735,7 +751,7 @@ elif plot_category == "PL":
             fig.update_yaxes(title_text="PL Peak Intensity", secondary_y=True, color='#01153E')
             fig.update_xaxes(title_text="Time (h)")
             fig.update_layout(height=500, template="plotly_white",
-                              title=f"PL + Band-edge slope - {get_label(selected_id)}")
+                              title=f"PL + Band-edge slope - {get_label(selected_id)}", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_pss:
@@ -746,6 +762,7 @@ elif plot_category == "PL":
                 st.session_state["pl_pss_cells"] = all_ids
             st.session_state["pl_pss_all_prev"] = select_all_pl_pss
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_pss_cells")
+            skip_range = _time_skip_ui("pl_pss")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -758,7 +775,7 @@ elif plot_category == "PL":
             fig.update_layout(
                 xaxis_title="Time (h)", yaxis_title="PL Self-Similarity",
                 height=500, template="plotly_white",
-                title="PL Self-Similarity vs Time")
+                title="PL Self-Similarity vs Time", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab_bandgap:
@@ -769,6 +786,7 @@ elif plot_category == "PL":
                 st.session_state["pl_bg_cells"] = all_ids
             st.session_state["pl_bg_all_prev"] = select_all_pl_bg
             selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_bg_cells")
+            skip_range = _time_skip_ui("pl_bg")
         with col2:
             colors = get_colors(len(selected_ids))
             fig = go.Figure()
@@ -789,18 +807,19 @@ elif plot_category == "PL":
             fig.update_layout(
                 xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
                 height=500, template="plotly_white",
-                title="PL Bandgap vs Time  (E = 1240 / λ_peak)")
+                title="PL Bandgap vs Time  (E = 1240 / λ_peak)", **_FONT)
             st.plotly_chart(fig, use_container_width=True)
 
 elif plot_category == "Conditions":
     if not condition_map:
         st.warning("Upload a runsheet (Excel) with ID-to-condition mapping in the sidebar to use this section.")
     else:
-        tab_box, tab_summary = st.tabs(["Box Plot", "Summary Table"])
+        tab_box, tab_summary = st.tabs(["Distribution Plot", "Summary Table"])
 
         with tab_box:
             col1, col2 = st.columns([1, 3])
             with col1:
+                plot_type = st.radio("Plot type", ["Box", "Scatter"], horizontal=True, key="cond_plot_type")
                 metric = st.selectbox("Metric", [
                     "Band-edge slope (last)",
                     "PL Peak Intensity (initial)",
@@ -832,13 +851,19 @@ elif plot_category == "Conditions":
 
                 if data_list:
                     df_plot = pd.DataFrame(data_list)
-                    fig = px.box(df_plot, x="Condition", y=metric, points="all",
-                                 hover_data=["ID"], template="plotly_white")
+                    if plot_type == "Box":
+                        fig = px.box(df_plot, x="Condition", y=metric, points="all",
+                                     hover_data=["ID"], template="plotly_white")
+                    else:
+                        fig = px.strip(df_plot, x="Condition", y=metric,
+                                       hover_data=["ID"], color="Condition",
+                                       template="plotly_white")
+                        fig.update_traces(marker=dict(size=10, opacity=0.8))
                     fig.update_layout(height=500, title=f"{metric} by {cond_col}",
-                                      xaxis_title=cond_col)
+                                      xaxis_title=cond_col, **_FONT)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.warning("No matching data for box plot.")
+                    st.warning("No matching data for plot.")
 
         with tab_summary:
             summary_rows = []
@@ -910,7 +935,7 @@ elif plot_category == "Correlations":
             title=f"{y_metric}  vs  {x_metric}"
         )
         fig.update_traces(textposition="top center", marker=dict(size=10))
-        fig.update_layout(xaxis_title=x_metric, yaxis_title=y_metric)
+        fig.update_layout(xaxis_title=x_metric, yaxis_title=y_metric, **_FONT)
         st.plotly_chart(fig, use_container_width=True)
 
         # Pearson correlation of every metric vs the chosen X
