@@ -68,33 +68,80 @@ def parse_section(section):
     return ID, dataframe
 
 
+def drop_incomplete_rounds(df):
+    """Keep only rounds that have all three of the D/W/L measurements.
+
+    A run interrupted mid-round leaves e.g. a D and a W with no L. Those rows must
+    go before concatenating, otherwise the D/W/L stacks end up with different
+    lengths and every later round gets paired with the wrong dark frame.
+    """
+    types_per_round = df.groupby("Round")["Type (D/W/L)"].agg(set)
+    complete = types_per_round[types_per_round.map({"D", "W", "L"}.issubset)].index
+    return df[df["Round"].isin(complete)].copy()
+
+
+def merge_files(file_contents_list):
+    """Concatenate the per-cell tables of several runs, in the order given.
+
+    Each file restarts its Round counter and its clock at zero, so later files are
+    shifted to continue where the previous one stopped. Spectra are matched by
+    column *position*, not by column name: the header repeats integer wavelengths
+    (285 285 286 286 ...) and pandas de-duplicates them into 285, 285.1, ..., but
+    which wavelengths repeat differs between runs. Aligning on those names makes
+    pd.concat outer-join into extra NaN columns, which poisons every PL quantity.
+    """
+    all_sections = [contents.split("#") for _, contents in file_contents_list]
+    n_sections = min(len(s) for s in all_sections)
+
+    merged = {}
+    for i in range(1, n_sections):
+        df_total = None
+        IDstring = None
+        time_offset = 0.0
+        round_offset = 0
+
+        for j, sections in enumerate(all_sections):
+            ID_j, df_j = parse_section(sections[i])
+            fname = file_contents_list[j][0]
+
+            if df_total is None:
+                IDstring = ID_j
+            else:
+                if ID_j != IDstring:
+                    raise ValueError(
+                        f"Section {i} is '{IDstring}' in {file_contents_list[0][0]} "
+                        f"but '{ID_j}' in {fname}; files describe different cells.")
+                if len(df_j.columns) != len(df_total.columns):
+                    raise ValueError(
+                        f"{IDstring}: {fname} has {len(df_j.columns)} columns but "
+                        f"{file_contents_list[0][0]} has {len(df_total.columns)}.")
+                df_j.columns = df_total.columns
+
+            # Elapsed time of the whole run, including a trailing partial round.
+            file_duration = float(df_j["Time (h)"].max())
+            df_j = drop_incomplete_rounds(df_j)
+
+            df_j["Round"] = df_j["Round"].rank(method="dense").astype(int) + round_offset
+            df_j["Time (h)"] = df_j["Time (h)"] + time_offset
+
+            df_total = df_j if df_total is None else pd.concat([df_total, df_j], ignore_index=True)
+            round_offset = int(df_total["Round"].max())
+            time_offset += file_duration
+
+        merged[IDstring] = df_total
+
+    return merged
+
+
 @st.cache_data(show_spinner="Importing HITSTA data...", ttl=60)
-def import_HITSTA(file_contents_list, _version=3):
+def import_HITSTA(file_contents_list, _version=4):
     """
     Accepts a list of (filename, file_content_string) tuples.
     Returns a dictionary with keys "ID1", "ID2", etc.
     """
 
-    all_sections = []
-    for fname, contents in file_contents_list:
-        sections = contents.split("#")
-        all_sections.append(sections)
-
-    # Merge sections from multiple files
-    sections_merged = [all_sections[0][0]]
-    for i in range(1, len(all_sections[0])):
-        for j in range(len(file_contents_list)):
-            if j == 0:
-                IDstring, df = parse_section(all_sections[0][i])
-            else:
-                _, df_add = parse_section(all_sections[j][i])
-                df_add["Time (h)"] = df_add["Time (h)"] + df["Time (h)"].iloc[-1]
-                df = pd.concat([df, df_add])
-        sections_merged.append(IDstring + "\n" + df.to_csv(sep="\t"))
-
     exp = {}
-    for section in sections_merged[1:50]:
-        IDstring, df = parse_section(section)
+    for IDstring, df in merge_files(file_contents_list).items():
         wavelengths = df.columns[4:].to_numpy(dtype=float)
         wavelengths = np.linspace(min(wavelengths), max(wavelengths), len(wavelengths))
 
