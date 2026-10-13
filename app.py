@@ -474,7 +474,7 @@ ANALYSES = {
                     "band-edge slope and spectral self-similarity over time."),
     "PL": (":material/flare:", "Photoluminescence (PL)",
            "Laser-excited emission spectra: Gaussian peak fits, peak intensity, "
-           "bandgap and spectral self-similarity over time."),
+           "peak wavelength and spectral self-similarity over time."),
     "Conditions": (":material/category:", "By condition",
                    "Final metrics grouped by the experimental conditions from the runsheet."),
     "Correlations": (":material/scatter_plot:", "Correlations",
@@ -692,9 +692,9 @@ if plot_category == "Reflectance":
         _tab_rss()
 
 elif plot_category == "PL":
-    tab_single, tab_multi, tab_intensity, tab_twin, tab_pss, tab_bandgap = st.tabs([
+    tab_single, tab_multi, tab_intensity, tab_twin, tab_pss = st.tabs([
         "Single Cell", "Multi Cell", "PL Peak Intensity vs Time",
-        "PL + Band-edge Slope", "PL Self-Similarity vs Time", "PL Bandgap vs Time"])
+        "PL + Band-edge Slope", "PL Self-Similarity vs Time"])
 
     with tab_single:
         @st.fragment
@@ -958,38 +958,6 @@ elif plot_category == "PL":
                     title="PL Self-Similarity vs Time", **_FONT)
                 st.plotly_chart(fig, use_container_width=True)
         _tab_pss()
-
-    with tab_bandgap:
-        @st.fragment
-        def _tab_bandgap():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                selected_ids = cell_selector("pl_bg_cells", default_ids)
-                skip_range = _time_skip_ui("pl_bg")
-            with col2:
-                colors = get_colors(len(selected_ids))
-                fig = go.Figure()
-                for i, sid in enumerate(selected_ids):
-                    peak_wls = exp[sid]["PL Peak Wavelength"]
-                    fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
-                    cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
-                    peak_wls = peak_wls[:cutoff]
-                    times_sid = exp[sid]["Times"][:cutoff]
-                    valid = peak_wls > 0
-                    bandgaps = np.where(valid, 1240.0 / np.where(valid, peak_wls, 1), np.nan)
-                    t, bg = apply_time_skip(times_sid, bandgaps, skip_range=skip_range)
-                    fig.add_trace(go.Scatter(
-                        x=t, y=bg,
-                        mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=3),
-                        marker=dict(size=8, symbol='circle')))
-                fig.update_layout(
-                    xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
-                    height=500, template="plotly_white",
-                    title="PL Bandgap vs Time  (E = 1240 / λ_peak)", **_FONT)
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position (and therefore no valid bandgap) can be extracted beyond that point.")
-        _tab_bandgap()
 
 elif plot_category == "Conditions":
     if not condition_map:
