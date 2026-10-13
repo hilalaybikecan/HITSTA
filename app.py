@@ -523,6 +523,11 @@ def apply_time_skip(times, *arrays, skip_range=None):
     return (times[mask],) + tuple(arr[mask] for arr in arrays)
 
 
+def in_time_skip(t, skip_range):
+    """True if time t falls inside the skipped range."""
+    return skip_range is not None and skip_range[0] <= t <= skip_range[1]
+
+
 def _time_skip_ui(key_prefix):
     """Render compact time-skip controls inline; return skip_range tuple or None."""
     enable = st.checkbox("Skip time range", key=f"{key_prefix}_ts_en")
@@ -564,6 +569,7 @@ if plot_category == "Reflectance":
                 y_range = (y_min, y_max_val)
                 smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=1, step=1, key="r_single_smooth")
                 show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
+                skip_range = _time_skip_ui("r_single")
             with col2:
                 rounds_to_plot = range(round_range[0], round_range[1] + 1)
                 colors = get_sequential_colors(len(rounds_to_plot))
@@ -572,7 +578,7 @@ if plot_category == "Reflectance":
                 wl_arr = exp[selected_id]["Wavelengths"]
                 be_idx = int(np.argmin(np.abs(wl_arr - be_wl)))
                 for i, rnd in enumerate(rounds_to_plot):
-                    if rnd < len(exp[selected_id]["Reflectance"]):
+                    if rnd < len(exp[selected_id]["Reflectance"]) and not in_time_skip(exp[selected_id]["Times"][rnd], skip_range):
                         refl_y = exp[selected_id]["Reflectance"][rnd].copy()
                         if smooth_sigma > 0:
                             refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
@@ -702,6 +708,7 @@ elif plot_category == "PL":
                     y_range = (y_min_pl, y_max_pl)
                 show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_fit")
                 show_peak_wl = st.checkbox("Show peak wavelength", value=False, key="pl_show_peak")
+                skip_range = _time_skip_ui("pl_single")
             with col2:
                 wl = exp[selected_id]["Wavelengths"]
                 times = exp[selected_id]["Times"]
@@ -722,7 +729,7 @@ elif plot_category == "PL":
                 fig = go.Figure()
                 y_max = 0
                 for i, rnd in enumerate(rounds_to_plot):
-                    if rnd < len(exp[selected_id]["PL Subtr"]):
+                    if rnd < len(exp[selected_id]["PL Subtr"]) and not in_time_skip(times[rnd], skip_range):
                         y_data = exp[selected_id]["PL Subtr"][rnd]
                         if np.any(wl_mask):
                             y_max = max(y_max, np.max(y_data[wl_mask]))
@@ -756,8 +763,9 @@ elif plot_category == "PL":
 
                 # ── Peak wavelength vs time ──
                 fig2 = go.Figure()
+                t_peak, y_peak = apply_time_skip(times, peak_wls, skip_range=skip_range)
                 fig2.add_trace(go.Scatter(
-                    x=times, y=peak_wls, mode='lines+markers',
+                    x=t_peak, y=y_peak, mode='lines+markers',
                     line=dict(color='#555', width=3), marker=dict(size=8, symbol='circle'),
                     name="PL Peak Wavelength"))
                 fig2.add_trace(go.Scatter(
