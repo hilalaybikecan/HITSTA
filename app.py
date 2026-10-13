@@ -133,7 +133,7 @@ def merge_files(file_contents_list):
     return merged
 
 
-@st.cache_data(show_spinner="Importing HITSTA data...", ttl=60)
+@st.cache_data(show_spinner="Analysing HITSTA data (only done once per upload)...", max_entries=3)
 def import_HITSTA(file_contents_list, _version=4):
     """
     Accepts a list of (filename, file_content_string) tuples.
@@ -316,13 +316,9 @@ st.title("HITSTA Interactive Analysis")
 # ── Sidebar: Data Loading ──
 st.sidebar.header("1. Load Data Files")
 
-uploaded_files = []
-
 uploaded = st.sidebar.file_uploader(
     "Upload HITSTA .txt data file(s)", type=["txt"], accept_multiple_files=True,
     help="Select one or more HITSTA measurement .txt files")
-if uploaded:
-    uploaded_files = [(f.name, f.read().decode("utf-8", errors="ignore")) for f in uploaded]
 
 # ── Sidebar: Condition mapping ──
 st.sidebar.header("2. Runsheet / Condition Mapping (optional)")
@@ -336,12 +332,18 @@ if condition_file:
     st.sidebar.success(f"Loaded {len(df_conditions)} rows")
 
 # ── Process data ──
-if not uploaded_files:
+if not uploaded:
     st.info("Upload HITSTA .txt data file(s) in the sidebar to get started. "
             "Optionally upload a runsheet (Excel) to label cells by experimental condition.")
     st.stop()
 
-exp = import_HITSTA(uploaded_files)
+# Analyse once per set of uploaded files; later clicks reuse the result from the session.
+files_sig = tuple((f.name, f.size, f.file_id) for f in uploaded)
+if st.session_state.get("_files_sig") != files_sig:
+    uploaded_files = [(f.name, f.getvalue().decode("utf-8", errors="ignore")) for f in uploaded]
+    st.session_state["_exp"] = import_HITSTA(uploaded_files)
+    st.session_state["_files_sig"] = files_sig
+exp = st.session_state["_exp"]
 all_ids = list(exp.keys())
 default_ids = [sid for sid in all_ids if sid not in ("ID1", "ID2")][:5]
 
@@ -372,6 +374,21 @@ if df_conditions is not None:
         id_key = f"ID{int(row[hitsta_col])}" if not str(row[hitsta_col]).startswith("ID") else str(row[hitsta_col])
         condition_map[id_key] = str(row[cond_col])
     st.sidebar.success(f"Mapped {len(condition_map)} cells to conditions")
+
+
+def cell_selector(key, default, label="Cells"):
+    """Full-width toggle pills for picking cells, with Select all / Clear buttons."""
+    if key not in st.session_state:
+        st.session_state[key] = list(default)
+
+    def _set(value):
+        st.session_state[key] = list(value)
+
+    b1, b2, _ = st.columns([1, 1, 8])
+    b1.button("Select all", key=f"{key}_btn_all", on_click=_set, args=(all_ids,))
+    b2.button("Clear", key=f"{key}_btn_none", on_click=_set, args=([],))
+    selected = st.pills(label, all_ids, selection_mode="multi", key=key) or []
+    return [sid for sid in all_ids if sid in selected]
 
 
 def get_label(id_str):
@@ -431,137 +448,137 @@ if plot_category == "Reflectance":
         "R Self-Similarity vs Time"])
 
     with tab_single:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="r_single_cell")
-            max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
-            round_range = st.slider("Round range", 0, max_round, (0, max_round), key="r_single_rr")
-            wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_single_wl_min")
-            wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_single_wl_max")
-            wl_range = (wl_min, wl_max)
-            y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
-            y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
-            y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_single_smooth")
-            show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
-        with col2:
-            rounds_to_plot = range(round_range[0], round_range[1] + 1)
-            colors = get_sequential_colors(len(rounds_to_plot))
-            fig = go.Figure()
-            be_wl = exp[selected_id]["Bandedge"][0]
-            wl_arr = exp[selected_id]["Wavelengths"]
-            be_idx = int(np.argmin(np.abs(wl_arr - be_wl)))
-            for i, rnd in enumerate(rounds_to_plot):
-                if rnd < len(exp[selected_id]["Reflectance"]):
-                    refl_y = exp[selected_id]["Reflectance"][rnd].copy()
+        @st.fragment
+        def _tab_single():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="r_single_cell")
+                max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
+                round_range = st.slider("Round range", 0, max_round, (0, max_round), key="r_single_rr")
+                wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_single_wl_min")
+                wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_single_wl_max")
+                wl_range = (wl_min, wl_max)
+                y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
+                y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
+                y_range = (y_min, y_max_val)
+                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_single_smooth")
+                show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
+            with col2:
+                rounds_to_plot = range(round_range[0], round_range[1] + 1)
+                colors = get_sequential_colors(len(rounds_to_plot))
+                fig = go.Figure()
+                be_wl = exp[selected_id]["Bandedge"][0]
+                wl_arr = exp[selected_id]["Wavelengths"]
+                be_idx = int(np.argmin(np.abs(wl_arr - be_wl)))
+                for i, rnd in enumerate(rounds_to_plot):
+                    if rnd < len(exp[selected_id]["Reflectance"]):
+                        refl_y = exp[selected_id]["Reflectance"][rnd].copy()
+                        if smooth_sigma > 0:
+                            refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
+                        fig.add_trace(go.Scatter(
+                            x=wl_arr,
+                            y=refl_y,
+                            mode='lines', name=f"Round {int(rnd)}",
+                            line=dict(color=colors[i], width=2.5)))
+                        if show_bandedge:
+                            fig.add_trace(go.Scatter(
+                                x=[be_wl], y=[exp[selected_id]["Reflectance"][rnd][be_idx]],
+                                mode='markers',
+                                marker=dict(color='black', size=9, symbol='circle-open',
+                                            line=dict(width=2.5)),
+                                showlegend=False,
+                                hovertemplate=f"Round {int(rnd)}: {exp[selected_id]['Reflectance'][rnd][be_idx]:.3f}<extra></extra>"))
+                fig.update_layout(
+                    xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
+                    xaxis_range=list(wl_range), yaxis_range=list(y_range),
+                    height=500, template="plotly_white",
+                    title=f"Reflectance - {get_label(selected_id)}", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_single()
+
+    with tab_multi:
+        @st.fragment
+        def _tab_multi():
+            selected_ids = cell_selector("r_multi_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
+                wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_multi_wl_min")
+                wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_multi_wl_max")
+                wl_range = (wl_min, wl_max)
+                y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
+                y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
+                y_range = (y_min, y_max_val)
+                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_multi_smooth")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    rnd = min(int(round_num), len(exp[sid]["Reflectance"]) - 1)
+                    refl_y = exp[sid]["Reflectance"][rnd].copy()
                     if smooth_sigma > 0:
                         refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
                     fig.add_trace(go.Scatter(
-                        x=wl_arr,
+                        x=exp[sid]["Wavelengths"],
                         y=refl_y,
-                        mode='lines', name=f"Round {int(rnd)}",
+                        mode='lines', name=get_label(sid),
                         line=dict(color=colors[i], width=2.5)))
-                    if show_bandedge:
-                        fig.add_trace(go.Scatter(
-                            x=[be_wl], y=[exp[selected_id]["Reflectance"][rnd][be_idx]],
-                            mode='markers',
-                            marker=dict(color='black', size=9, symbol='circle-open',
-                                        line=dict(width=2.5)),
-                            showlegend=False,
-                            hovertemplate=f"Round {int(rnd)}: {exp[selected_id]['Reflectance'][rnd][be_idx]:.3f}<extra></extra>"))
-            fig.update_layout(
-                xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
-                xaxis_range=list(wl_range), yaxis_range=list(y_range),
-                height=500, template="plotly_white",
-                title=f"Reflectance - {get_label(selected_id)}", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with tab_multi:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_r_multi = st.checkbox("Select All", key="r_multi_all")
-            if select_all_r_multi and not st.session_state.get("r_multi_all_prev", False):
-                st.session_state["r_multi_cells"] = all_ids
-            st.session_state["r_multi_all_prev"] = select_all_r_multi
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_multi_cells")
-            round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
-            wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_multi_wl_min")
-            wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_multi_wl_max")
-            wl_range = (wl_min, wl_max)
-            y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
-            y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
-            y_range = (y_min, y_max_val)
-            smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_multi_smooth")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                rnd = min(int(round_num), len(exp[sid]["Reflectance"]) - 1)
-                refl_y = exp[sid]["Reflectance"][rnd].copy()
-                if smooth_sigma > 0:
-                    refl_y = gaussian_filter1d(refl_y, sigma=smooth_sigma)
-                fig.add_trace(go.Scatter(
-                    x=exp[sid]["Wavelengths"],
-                    y=refl_y,
-                    mode='lines', name=get_label(sid),
-                    line=dict(color=colors[i], width=2.5)))
-            fig.update_layout(
-                xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
-                xaxis_range=list(wl_range), yaxis_range=list(y_range),
-                height=500, template="plotly_white",
-                title=f"Reflectance comparison - Round {int(round_num)}", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(
+                    xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
+                    xaxis_range=list(wl_range), yaxis_range=list(y_range),
+                    height=500, template="plotly_white",
+                    title=f"Reflectance comparison - Round {int(round_num)}", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_multi()
 
     with tab_bes:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_bes = st.checkbox("Select All", key="r_bes_all")
-            if select_all_bes and not st.session_state.get("r_bes_all_prev", False):
-                st.session_state["r_bes_cells"] = all_ids
-            st.session_state["r_bes_all_prev"] = select_all_bes
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_bes_cells")
-            normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
-            skip_range = _time_skip_ui("r_bes")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            key = "R_slopes (norm.)" if normalize else "R_slopes (raw)"
-            for i, sid in enumerate(selected_ids):
-                t, y = apply_time_skip(exp[sid]["Times"], exp[sid][key], skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t, y=y,
-                    mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.75),
-                    marker=dict(size=4)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="Band-edge slope",
-                height=500, template="plotly_white",
-                title="Band-edge slope vs Time", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
+        @st.fragment
+        def _tab_bes():
+            selected_ids = cell_selector("r_bes_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
+                skip_range = _time_skip_ui("r_bes")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                key = "R_slopes (norm.)" if normalize else "R_slopes (raw)"
+                for i, sid in enumerate(selected_ids):
+                    t, y = apply_time_skip(exp[sid]["Times"], exp[sid][key], skip_range=skip_range)
+                    fig.add_trace(go.Scatter(
+                        x=t, y=y,
+                        mode='lines+markers', name=get_label(sid),
+                        line=dict(color=colors[i], width=1.75),
+                        marker=dict(size=4)))
+                fig.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="Band-edge slope",
+                    height=500, template="plotly_white",
+                    title="Band-edge slope vs Time", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_bes()
 
     with tab_rss:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_rss = st.checkbox("Select All", key="r_rss_all")
-            if select_all_rss and not st.session_state.get("r_rss_all_prev", False):
-                st.session_state["r_rss_cells"] = all_ids
-            st.session_state["r_rss_all_prev"] = select_all_rss
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="r_rss_cells")
-            skip_range = _time_skip_ui("r_rss")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["R Self-Similarity"], skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t, y=y,
-                    mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="R Self-Similarity",
-                height=500, template="plotly_white",
-                title="Reflectance Self-Similarity vs Time", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
+        @st.fragment
+        def _tab_rss():
+            selected_ids = cell_selector("r_rss_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                skip_range = _time_skip_ui("r_rss")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["R Self-Similarity"], skip_range=skip_range)
+                    fig.add_trace(go.Scatter(
+                        x=t, y=y,
+                        mode='lines+markers', name=get_label(sid),
+                        line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
+                fig.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="R Self-Similarity",
+                    height=500, template="plotly_white",
+                    title="Reflectance Self-Similarity vs Time", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_rss()
 
 elif plot_category == "PL":
     tab_single, tab_multi, tab_intensity, tab_twin, tab_pss, tab_bandgap = st.tabs([
@@ -569,295 +586,297 @@ elif plot_category == "PL":
         "PL + Band-edge Slope", "PL Self-Similarity vs Time", "PL Bandgap vs Time"])
 
     with tab_single:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_single_cell")
-            wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_single_wl_min")
-            wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_single_wl_max")
-            wl_range = (wl_min, wl_max)
-            auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_auto_y")
-            if not auto_y:
-                y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_y_min")
-                y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_y_max")
-                y_range = (y_min_pl, y_max_pl)
-            show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_fit")
-            show_peak_wl = st.checkbox("Show peak wavelength", value=False, key="pl_show_peak")
-        with col2:
-            wl = exp[selected_id]["Wavelengths"]
-            times = exp[selected_id]["Times"]
-            n_rounds = len(times)
-            wl_mask = (wl >= wl_range[0]) & (wl <= wl_range[1])
-            peak_wls = exp[selected_id]["PL Peak Wavelength"]
+        @st.fragment
+        def _tab_single():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_single_cell")
+                wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_single_wl_min")
+                wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_single_wl_max")
+                wl_range = (wl_min, wl_max)
+                auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_auto_y")
+                if not auto_y:
+                    y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_y_min")
+                    y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_y_max")
+                    y_range = (y_min_pl, y_max_pl)
+                show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_fit")
+                show_peak_wl = st.checkbox("Show peak wavelength", value=False, key="pl_show_peak")
+            with col2:
+                wl = exp[selected_id]["Wavelengths"]
+                times = exp[selected_id]["Times"]
+                n_rounds = len(times)
+                wl_mask = (wl >= wl_range[0]) & (wl <= wl_range[1])
+                peak_wls = exp[selected_id]["PL Peak Wavelength"]
 
-            # ── Single slider: show rounds 0 → selected ──
-            max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
-            round_idx = st.slider("Round", 0, max_round, max_round, key="pl_all_rr")
-            t_current = times[min(round_idx, n_rounds - 1)]
-            st.caption(f"Round {round_idx}  →  {t_current:.2f} h  |  "
-                       f"peak = {peak_wls[min(round_idx, n_rounds - 1)]:.1f} nm")
+                # ── Single slider: show rounds 0 → selected ──
+                max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
+                round_idx = st.slider("Round", 0, max_round, max_round, key="pl_all_rr")
+                t_current = times[min(round_idx, n_rounds - 1)]
+                st.caption(f"Round {round_idx}  →  {t_current:.2f} h  |  "
+                           f"peak = {peak_wls[min(round_idx, n_rounds - 1)]:.1f} nm")
 
-            # ── PL spectra plot (rounds 0 … round_idx) ──
-            rounds_to_plot = range(0, round_idx + 1)
-            colors = get_sequential_colors(max(round_idx + 1, 2))
-            fig = go.Figure()
-            y_max = 0
-            for i, rnd in enumerate(rounds_to_plot):
-                if rnd < len(exp[selected_id]["PL Subtr"]):
-                    y_data = exp[selected_id]["PL Subtr"][rnd]
+                # ── PL spectra plot (rounds 0 … round_idx) ──
+                rounds_to_plot = range(0, round_idx + 1)
+                colors = get_sequential_colors(max(round_idx + 1, 2))
+                fig = go.Figure()
+                y_max = 0
+                for i, rnd in enumerate(rounds_to_plot):
+                    if rnd < len(exp[selected_id]["PL Subtr"]):
+                        y_data = exp[selected_id]["PL Subtr"][rnd]
+                        if np.any(wl_mask):
+                            y_max = max(y_max, np.max(y_data[wl_mask]))
+                        fig.add_trace(go.Scatter(
+                            x=wl, y=y_data,
+                            mode='lines', name=f"Round {int(rnd)}",
+                            line=dict(color=colors[i], width=1.5)))
+                        if show_fit and rnd < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][rnd] is not None:
+                            fig.add_trace(go.Scatter(
+                                x=wl, y=exp[selected_id]["PL Fitted"][rnd],
+                                mode='lines', name=f"Fit {int(rnd)}",
+                                line=dict(color=colors[i], width=1.5, dash='dash'),
+                                showlegend=False))
+                cur = min(round_idx, n_rounds - 1)
+                if show_peak_wl and peak_wls[cur] > 0:
+                    fig.add_vline(x=peak_wls[cur], line_dash="dash",
+                                  line_color="red", line_width=1.5,
+                                  annotation_text=f"{peak_wls[cur]:.1f} nm",
+                                  annotation_position="top right")
+                layout_kwargs = dict(
+                    xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
+                    xaxis_range=list(wl_range),
+                    height=480, template="plotly_white",
+                    title=f"PL Spectra - {get_label(selected_id)}", **_FONT)
+                if auto_y:
+                    layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1] if y_max > 0 else None
+                else:
+                    layout_kwargs["yaxis_range"] = list(y_range)
+                fig.update_layout(**layout_kwargs)
+                st.plotly_chart(fig, use_container_width=True)
+
+                # ── Peak wavelength vs time ──
+                fig2 = go.Figure()
+                fig2.add_trace(go.Scatter(
+                    x=times, y=peak_wls, mode='lines+markers',
+                    line=dict(color='#555', width=1.5), marker=dict(size=4),
+                    name="PL Peak Wavelength"))
+                fig2.add_trace(go.Scatter(
+                    x=[t_current], y=[peak_wls[cur]],
+                    mode='markers', marker=dict(size=12, color='red', symbol='circle'),
+                    showlegend=False,
+                    hovertemplate=f"Round {int(exp[selected_id]['Rounds'][cur])}: "
+                                  f"{peak_wls[cur]:.1f} nm<extra></extra>"))
+                fig2.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
+                    height=250, template="plotly_white",
+                    title="PL Peak Wavelength vs Time",
+                    margin=dict(t=40, b=40), **_FONT)
+                st.plotly_chart(fig2, use_container_width=True)
+        _tab_single()
+
+    with tab_multi:
+        @st.fragment
+        def _tab_multi():
+            selected_ids = cell_selector("pl_multi_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                max_round_multi = max((int(exp[sid]["Rounds"][-1]) for sid in selected_ids if len(exp[sid]["Rounds"]) > 0), default=0)
+                round_num = st.slider("Round", 0, max(max_round_multi, 1), 0, key="pl_multi_rnd")
+                if selected_ids:
+                    _ref = selected_ids[0]
+                    _ref_rnd = min(round_num, len(exp[_ref]["Times"]) - 1)
+                    st.caption(f"t ≈ {exp[_ref]['Times'][_ref_rnd]:.2f} h  (ref: {get_label(_ref)})")
+                wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
+                wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
+                wl_range = (wl_min, wl_max)
+                auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_multi_auto_y")
+                if not auto_y:
+                    y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_multi_y_min")
+                    y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_multi_y_max")
+                    y_range = (y_min_pl, y_max_pl)
+                show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_multi_fit")
+                show_fit_peak = st.checkbox("Show fit peak wavelength", value=False, key="pl_multi_show_peak")
+                skip_range = _time_skip_ui("pl_multi")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                y_max = 0
+                for i, sid in enumerate(selected_ids):
+                    rnd = min(int(round_num), len(exp[sid]["PL Subtr"]) - 1)
+                    y_data = exp[sid]["PL Subtr"][rnd]
+                    wl_mask = (exp[sid]["Wavelengths"] >= wl_range[0]) & (exp[sid]["Wavelengths"] <= wl_range[1])
                     if np.any(wl_mask):
                         y_max = max(y_max, np.max(y_data[wl_mask]))
                     fig.add_trace(go.Scatter(
-                        x=wl, y=y_data,
-                        mode='lines', name=f"Round {int(rnd)}",
+                        x=exp[sid]["Wavelengths"],
+                        y=y_data,
+                        mode='lines', name=get_label(sid),
                         line=dict(color=colors[i], width=1.5)))
-                    if show_fit and rnd < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][rnd] is not None:
+                    if show_fit and rnd < len(exp[sid]["PL Fitted"]) and exp[sid]["PL Fitted"][rnd] is not None:
                         fig.add_trace(go.Scatter(
-                            x=wl, y=exp[selected_id]["PL Fitted"][rnd],
-                            mode='lines', name=f"Fit {int(rnd)}",
+                            x=exp[sid]["Wavelengths"],
+                            y=exp[sid]["PL Fitted"][rnd],
+                            mode='lines', name=f"{get_label(sid)} fit",
                             line=dict(color=colors[i], width=1.5, dash='dash'),
                             showlegend=False))
-            cur = min(round_idx, n_rounds - 1)
-            if show_peak_wl and peak_wls[cur] > 0:
-                fig.add_vline(x=peak_wls[cur], line_dash="dash",
-                              line_color="red", line_width=1.5,
-                              annotation_text=f"{peak_wls[cur]:.1f} nm",
-                              annotation_position="top right")
-            layout_kwargs = dict(
-                xaxis_title="Wavelength (nm)", yaxis_title="PL intensity (counts)",
-                xaxis_range=list(wl_range),
-                height=480, template="plotly_white",
-                title=f"PL Spectra - {get_label(selected_id)}", **_FONT)
-            if auto_y:
-                layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1] if y_max > 0 else None
-            else:
-                layout_kwargs["yaxis_range"] = list(y_range)
-            fig.update_layout(**layout_kwargs)
-            st.plotly_chart(fig, use_container_width=True)
+                    if show_fit_peak and rnd < len(exp[sid]["PL Fit Parameters"]):
+                        peak_nm = exp[sid]["PL Fit Parameters"][rnd, 1]
+                        if not np.isnan(peak_nm) and peak_nm > 0:
+                            fig.add_vline(x=peak_nm, line_color=colors[i],
+                                          line_dash="dot", line_width=1.5,
+                                          annotation_text=f"{peak_nm:.1f}",
+                                          annotation_font_color=colors[i],
+                                          annotation_position="top left")
+                layout_kwargs = dict(
+                    xaxis_title="Wavelength (nm)", yaxis_title="PL intensity",
+                    xaxis_range=list(wl_range),
+                    height=460, template="plotly_white",
+                    title=f"PL comparison - Round {int(round_num)}", **_FONT)
+                if auto_y:
+                    layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1]
+                else:
+                    layout_kwargs["yaxis_range"] = list(y_range)
+                fig.update_layout(**layout_kwargs)
+                st.plotly_chart(fig, use_container_width=True)
 
-            # ── Peak wavelength vs time ──
-            fig2 = go.Figure()
-            fig2.add_trace(go.Scatter(
-                x=times, y=peak_wls, mode='lines+markers',
-                line=dict(color='#555', width=1.5), marker=dict(size=4),
-                name="PL Peak Wavelength"))
-            fig2.add_trace(go.Scatter(
-                x=[t_current], y=[peak_wls[cur]],
-                mode='markers', marker=dict(size=12, color='red', symbol='circle'),
-                showlegend=False,
-                hovertemplate=f"Round {int(exp[selected_id]['Rounds'][cur])}: "
-                              f"{peak_wls[cur]:.1f} nm<extra></extra>"))
-            fig2.update_layout(
-                xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
-                height=250, template="plotly_white",
-                title="PL Peak Wavelength vs Time",
-                margin=dict(t=40, b=40), **_FONT)
-            st.plotly_chart(fig2, use_container_width=True)
-
-    with tab_multi:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_pl_multi = st.checkbox("Select All", key="pl_multi_all")
-            if select_all_pl_multi and not st.session_state.get("pl_multi_all_prev", False):
-                st.session_state["pl_multi_cells"] = all_ids
-            st.session_state["pl_multi_all_prev"] = select_all_pl_multi
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_multi_cells")
-            max_round_multi = max((int(exp[sid]["Rounds"][-1]) for sid in selected_ids if len(exp[sid]["Rounds"]) > 0), default=0)
-            round_num = st.slider("Round", 0, max(max_round_multi, 1), 0, key="pl_multi_rnd")
-            if selected_ids:
-                _ref = selected_ids[0]
-                _ref_rnd = min(round_num, len(exp[_ref]["Times"]) - 1)
-                st.caption(f"t ≈ {exp[_ref]['Times'][_ref_rnd]:.2f} h  (ref: {get_label(_ref)})")
-            wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_multi_wl_min")
-            wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_multi_wl_max")
-            wl_range = (wl_min, wl_max)
-            auto_y = st.checkbox("Auto Y-axis", value=True, key="pl_multi_auto_y")
-            if not auto_y:
-                y_min_pl = st.number_input("Y min", value=-0.5, step=0.5, format="%.1f", key="pl_multi_y_min")
-                y_max_pl = st.number_input("Y max", value=5.0, step=0.5, format="%.1f", key="pl_multi_y_max")
-                y_range = (y_min_pl, y_max_pl)
-            show_fit = st.checkbox("Show Gaussian fit", value=False, key="pl_multi_fit")
-            show_fit_peak = st.checkbox("Show fit peak wavelength", value=False, key="pl_multi_show_peak")
-            skip_range = _time_skip_ui("pl_multi")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            y_max = 0
-            for i, sid in enumerate(selected_ids):
-                rnd = min(int(round_num), len(exp[sid]["PL Subtr"]) - 1)
-                y_data = exp[sid]["PL Subtr"][rnd]
-                wl_mask = (exp[sid]["Wavelengths"] >= wl_range[0]) & (exp[sid]["Wavelengths"] <= wl_range[1])
-                if np.any(wl_mask):
-                    y_max = max(y_max, np.max(y_data[wl_mask]))
-                fig.add_trace(go.Scatter(
-                    x=exp[sid]["Wavelengths"],
-                    y=y_data,
-                    mode='lines', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.5)))
-                if show_fit and rnd < len(exp[sid]["PL Fitted"]) and exp[sid]["PL Fitted"][rnd] is not None:
-                    fig.add_trace(go.Scatter(
-                        x=exp[sid]["Wavelengths"],
-                        y=exp[sid]["PL Fitted"][rnd],
-                        mode='lines', name=f"{get_label(sid)} fit",
-                        line=dict(color=colors[i], width=1.5, dash='dash'),
-                        showlegend=False))
-                if show_fit_peak and rnd < len(exp[sid]["PL Fit Parameters"]):
-                    peak_nm = exp[sid]["PL Fit Parameters"][rnd, 1]
-                    if not np.isnan(peak_nm) and peak_nm > 0:
-                        fig.add_vline(x=peak_nm, line_color=colors[i],
-                                      line_dash="dot", line_width=1.5,
-                                      annotation_text=f"{peak_nm:.1f}",
-                                      annotation_font_color=colors[i],
-                                      annotation_position="top left")
-            layout_kwargs = dict(
-                xaxis_title="Wavelength (nm)", yaxis_title="PL intensity",
-                xaxis_range=list(wl_range),
-                height=460, template="plotly_white",
-                title=f"PL comparison - Round {int(round_num)}", **_FONT)
-            if auto_y:
-                layout_kwargs["yaxis_range"] = [-y_max * 0.05, y_max * 1.1]
-            else:
-                layout_kwargs["yaxis_range"] = list(y_range)
-            fig.update_layout(**layout_kwargs)
-            st.plotly_chart(fig, use_container_width=True)
-
-            # ── Peak wavelength vs time ──
-            fig2 = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
-                cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
-                t, y = apply_time_skip(exp[sid]["Times"][:cutoff], exp[sid]["PL Peak Wavelength"][:cutoff],
-                                       skip_range=skip_range)
-                fig2.add_trace(go.Scatter(
-                    x=t, y=y, mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.5), marker=dict(size=3)))
-                if show_fit_peak:
-                    fit_peak = exp[sid]["PL Fit Parameters"][:cutoff, 1]
-                    t_fit, y_fit = apply_time_skip(exp[sid]["Times"][:cutoff], fit_peak,
-                                                   skip_range=skip_range)
-                    valid = ~np.isnan(y_fit)
-                    if np.any(valid):
-                        fig2.add_trace(go.Scatter(
-                            x=t_fit[valid], y=y_fit[valid],
-                            mode='lines', name=f"{get_label(sid)} fit peak",
-                            line=dict(color=colors[i], width=1.5, dash='dot'),
-                            showlegend=False))
-            fig2.update_layout(
-                xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
-                height=270, template="plotly_white",
-                title="PL Peak Wavelength vs Time",
-                margin=dict(t=40, b=40), **_FONT)
-            st.plotly_chart(fig2, use_container_width=True)
-            st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position can be extracted beyond that point.")
+                # ── Peak wavelength vs time ──
+                fig2 = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                    cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                    t, y = apply_time_skip(exp[sid]["Times"][:cutoff], exp[sid]["PL Peak Wavelength"][:cutoff],
+                                           skip_range=skip_range)
+                    fig2.add_trace(go.Scatter(
+                        x=t, y=y, mode='lines+markers', name=get_label(sid),
+                        line=dict(color=colors[i], width=1.5), marker=dict(size=3)))
+                    if show_fit_peak:
+                        fit_peak = exp[sid]["PL Fit Parameters"][:cutoff, 1]
+                        t_fit, y_fit = apply_time_skip(exp[sid]["Times"][:cutoff], fit_peak,
+                                                       skip_range=skip_range)
+                        valid = ~np.isnan(y_fit)
+                        if np.any(valid):
+                            fig2.add_trace(go.Scatter(
+                                x=t_fit[valid], y=y_fit[valid],
+                                mode='lines', name=f"{get_label(sid)} fit peak",
+                                line=dict(color=colors[i], width=1.5, dash='dot'),
+                                showlegend=False))
+                fig2.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
+                    height=270, template="plotly_white",
+                    title="PL Peak Wavelength vs Time",
+                    margin=dict(t=40, b=40), **_FONT)
+                st.plotly_chart(fig2, use_container_width=True)
+                st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position can be extracted beyond that point.")
+        _tab_multi()
 
     with tab_intensity:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_pl_int = st.checkbox("Select All", key="pl_int_all")
-            if select_all_pl_int and not st.session_state.get("pl_int_all_prev", False):
-                st.session_state["pl_int_cells"] = all_ids
-            st.session_state["pl_int_all_prev"] = select_all_pl_int
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_int_cells")
-            skip_range = _time_skip_ui("pl_int")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                if exp[sid]["PL Fit Parameters"][0, 0] > 0:
-                    t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Fit Parameters"][:, 0], skip_range=skip_range)
+        @st.fragment
+        def _tab_intensity():
+            selected_ids = cell_selector("pl_int_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                skip_range = _time_skip_ui("pl_int")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    if exp[sid]["PL Fit Parameters"][0, 0] > 0:
+                        t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Fit Parameters"][:, 0], skip_range=skip_range)
+                        fig.add_trace(go.Scatter(
+                            x=t, y=y,
+                            mode='lines+markers', name=get_label(sid),
+                            line=dict(color=colors[i], width=2),
+                            marker=dict(size=4)))
+                fig.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="PL Peak Intensity",
+                    height=500, template="plotly_white",
+                    title="PL Peak Intensity vs Time", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_intensity()
+
+    with tab_twin:
+        @st.fragment
+        def _tab_twin():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_twin_cell")
+                skip_range = _time_skip_ui("pl_twin")
+            with col2:
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                t_bes, y_bes = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["R_slopes (norm.)"], skip_range=skip_range)
+                fig.add_trace(go.Scatter(
+                    x=t_bes, y=y_bes,
+                    mode='lines+markers', name="Band-edge slope",
+                    line=dict(color='#800000', width=1.75), marker=dict(size=3)),
+                    secondary_y=False)
+                if exp[selected_id]["PL Fit Parameters"][0, 0] > 0:
+                    t_pl, y_pl = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["PL Fit Parameters"][:, 0], skip_range=skip_range)
+                    fig.add_trace(go.Scatter(
+                        x=t_pl, y=y_pl,
+                        mode='lines+markers', name="PL Peak Intensity",
+                        line=dict(color='#01153E', width=1.5), marker=dict(size=3)),
+                        secondary_y=True)
+                fig.update_yaxes(title_text="Band-edge slope", secondary_y=False, color='#800000')
+                fig.update_yaxes(title_text="PL Peak Intensity", secondary_y=True, color='#01153E')
+                fig.update_xaxes(title_text="Time (h)")
+                fig.update_layout(height=500, template="plotly_white",
+                                  title=f"PL + Band-edge slope - {get_label(selected_id)}", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_twin()
+
+    with tab_pss:
+        @st.fragment
+        def _tab_pss():
+            selected_ids = cell_selector("pl_pss_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                skip_range = _time_skip_ui("pl_pss")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Self-Similarity"], skip_range=skip_range)
                     fig.add_trace(go.Scatter(
                         x=t, y=y,
                         mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=2),
-                        marker=dict(size=4)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="PL Peak Intensity",
-                height=500, template="plotly_white",
-                title="PL Peak Intensity vs Time", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with tab_twin:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_twin_cell")
-            skip_range = _time_skip_ui("pl_twin")
-        with col2:
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
-            t_bes, y_bes = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["R_slopes (norm.)"], skip_range=skip_range)
-            fig.add_trace(go.Scatter(
-                x=t_bes, y=y_bes,
-                mode='lines+markers', name="Band-edge slope",
-                line=dict(color='#800000', width=1.75), marker=dict(size=3)),
-                secondary_y=False)
-            if exp[selected_id]["PL Fit Parameters"][0, 0] > 0:
-                t_pl, y_pl = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["PL Fit Parameters"][:, 0], skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t_pl, y=y_pl,
-                    mode='lines+markers', name="PL Peak Intensity",
-                    line=dict(color='#01153E', width=1.5), marker=dict(size=3)),
-                    secondary_y=True)
-            fig.update_yaxes(title_text="Band-edge slope", secondary_y=False, color='#800000')
-            fig.update_yaxes(title_text="PL Peak Intensity", secondary_y=True, color='#01153E')
-            fig.update_xaxes(title_text="Time (h)")
-            fig.update_layout(height=500, template="plotly_white",
-                              title=f"PL + Band-edge slope - {get_label(selected_id)}", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
-
-    with tab_pss:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_pl_pss = st.checkbox("Select All", key="pl_pss_all")
-            if select_all_pl_pss and not st.session_state.get("pl_pss_all_prev", False):
-                st.session_state["pl_pss_cells"] = all_ids
-            st.session_state["pl_pss_all_prev"] = select_all_pl_pss
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_pss_cells")
-            skip_range = _time_skip_ui("pl_pss")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                t, y = apply_time_skip(exp[sid]["Times"], exp[sid]["PL Self-Similarity"], skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t, y=y,
-                    mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="PL Self-Similarity",
-                height=500, template="plotly_white",
-                title="PL Self-Similarity vs Time", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
+                        line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
+                fig.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="PL Self-Similarity",
+                    height=500, template="plotly_white",
+                    title="PL Self-Similarity vs Time", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+        _tab_pss()
 
     with tab_bandgap:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            select_all_pl_bg = st.checkbox("Select All", key="pl_bg_all")
-            if select_all_pl_bg and not st.session_state.get("pl_bg_all_prev", False):
-                st.session_state["pl_bg_cells"] = all_ids
-            st.session_state["pl_bg_all_prev"] = select_all_pl_bg
-            selected_ids = st.multiselect("Cells", all_ids, default=default_ids, key="pl_bg_cells")
-            skip_range = _time_skip_ui("pl_bg")
-        with col2:
-            colors = get_colors(len(selected_ids))
-            fig = go.Figure()
-            for i, sid in enumerate(selected_ids):
-                peak_wls = exp[sid]["PL Peak Wavelength"]
-                fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
-                cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
-                peak_wls = peak_wls[:cutoff]
-                times_sid = exp[sid]["Times"][:cutoff]
-                valid = peak_wls > 0
-                bandgaps = np.where(valid, 1240.0 / np.where(valid, peak_wls, 1), np.nan)
-                t, bg = apply_time_skip(times_sid, bandgaps, skip_range=skip_range)
-                fig.add_trace(go.Scatter(
-                    x=t, y=bg,
-                    mode='lines+markers', name=get_label(sid),
-                    line=dict(color=colors[i], width=1.75),
-                    marker=dict(size=3)))
-            fig.update_layout(
-                xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
-                height=500, template="plotly_white",
-                title="PL Bandgap vs Time  (E = 1240 / λ_peak)", **_FONT)
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position (and therefore no valid bandgap) can be extracted beyond that point.")
+        @st.fragment
+        def _tab_bandgap():
+            selected_ids = cell_selector("pl_bg_cells", default_ids)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                skip_range = _time_skip_ui("pl_bg")
+            with col2:
+                colors = get_colors(len(selected_ids))
+                fig = go.Figure()
+                for i, sid in enumerate(selected_ids):
+                    peak_wls = exp[sid]["PL Peak Wavelength"]
+                    fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                    cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                    peak_wls = peak_wls[:cutoff]
+                    times_sid = exp[sid]["Times"][:cutoff]
+                    valid = peak_wls > 0
+                    bandgaps = np.where(valid, 1240.0 / np.where(valid, peak_wls, 1), np.nan)
+                    t, bg = apply_time_skip(times_sid, bandgaps, skip_range=skip_range)
+                    fig.add_trace(go.Scatter(
+                        x=t, y=bg,
+                        mode='lines+markers', name=get_label(sid),
+                        line=dict(color=colors[i], width=1.75),
+                        marker=dict(size=3)))
+                fig.update_layout(
+                    xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
+                    height=500, template="plotly_white",
+                    title="PL Bandgap vs Time  (E = 1240 / λ_peak)", **_FONT)
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Note: data is cut when PL signal drops too low — the Gaussian fit fails below an amplitude of 0.5, so no valid peak position (and therefore no valid bandgap) can be extracted beyond that point.")
+        _tab_bandgap()
 
 elif plot_category == "Conditions":
     if not condition_map:
@@ -866,74 +885,80 @@ elif plot_category == "Conditions":
         tab_box, tab_summary = st.tabs(["Distribution Plot", "Summary Table"])
 
         with tab_box:
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                plot_type = st.radio("Plot type", ["Box", "Scatter"], horizontal=True, key="cond_plot_type")
-                metric = st.selectbox("Metric", [
-                    "Band-edge slope (last)",
-                    "PL Peak Intensity (initial)",
-                    "PL Peak Intensity (last)",
-                    "Bandgap — Initial (eV)",
-                    "Bandgap — Final (eV)",
-                ], key="cond_metric")
-                excluded = st.multiselect("Exclude IDs", all_ids, key="cond_exclude")
-            with col2:
-                data_list = []
-                for sid in all_ids:
-                    if sid in excluded or sid not in condition_map:
-                        continue
-                    if metric == "Band-edge slope (last)":
-                        val = exp[sid]["R_slopes (norm.)"][-1]
-                    elif metric == "PL Peak Intensity (initial)":
-                        val = exp[sid]["PL Peak Intensity"][0]
-                    elif metric == "PL Peak Intensity (last)":
-                        val = exp[sid]["PL Peak Intensity"][-1]
-                    elif metric == "Bandgap — Initial (eV)":
-                        wl0 = exp[sid]["PL Peak Wavelength"][0]
-                        val = 1240.0 / wl0 if wl0 > 0 else np.nan
-                    elif metric == "Bandgap — Final (eV)":
-                        fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
-                        cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
-                        peak_wls_v = exp[sid]["PL Peak Wavelength"][:cutoff]
-                        val = (1240.0 / peak_wls_v[-1]) if len(peak_wls_v) > 0 and peak_wls_v[-1] > 0 else np.nan
-                    data_list.append({"Condition": condition_map[sid], metric: val, "ID": sid})
+            @st.fragment
+            def _tab_box():
+                excluded = cell_selector("cond_exclude", [], label="Exclude IDs")
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    plot_type = st.radio("Plot type", ["Box", "Scatter"], horizontal=True, key="cond_plot_type")
+                    metric = st.selectbox("Metric", [
+                        "Band-edge slope (last)",
+                        "PL Peak Intensity (initial)",
+                        "PL Peak Intensity (last)",
+                        "Bandgap — Initial (eV)",
+                        "Bandgap — Final (eV)",
+                    ], key="cond_metric")
+                with col2:
+                    data_list = []
+                    for sid in all_ids:
+                        if sid in excluded or sid not in condition_map:
+                            continue
+                        if metric == "Band-edge slope (last)":
+                            val = exp[sid]["R_slopes (norm.)"][-1]
+                        elif metric == "PL Peak Intensity (initial)":
+                            val = exp[sid]["PL Peak Intensity"][0]
+                        elif metric == "PL Peak Intensity (last)":
+                            val = exp[sid]["PL Peak Intensity"][-1]
+                        elif metric == "Bandgap — Initial (eV)":
+                            wl0 = exp[sid]["PL Peak Wavelength"][0]
+                            val = 1240.0 / wl0 if wl0 > 0 else np.nan
+                        elif metric == "Bandgap — Final (eV)":
+                            fit_amps = exp[sid]["PL Fit Parameters"][:, 0]
+                            cutoff = next((j for j, a in enumerate(fit_amps) if a < 0.5), len(fit_amps))
+                            peak_wls_v = exp[sid]["PL Peak Wavelength"][:cutoff]
+                            val = (1240.0 / peak_wls_v[-1]) if len(peak_wls_v) > 0 and peak_wls_v[-1] > 0 else np.nan
+                        data_list.append({"Condition": condition_map[sid], metric: val, "ID": sid})
 
-                if data_list:
-                    df_plot = pd.DataFrame(data_list)
-                    if plot_type == "Box":
-                        fig = px.box(df_plot, x="Condition", y=metric, points="all",
-                                     hover_data=["ID"], template="plotly_white")
+                    if data_list:
+                        df_plot = pd.DataFrame(data_list)
+                        if plot_type == "Box":
+                            fig = px.box(df_plot, x="Condition", y=metric, points="all",
+                                         hover_data=["ID"], template="plotly_white")
+                        else:
+                            fig = px.strip(df_plot, x="Condition", y=metric,
+                                           hover_data=["ID"], color="Condition",
+                                           template="plotly_white")
+                            fig.update_traces(marker=dict(size=10, opacity=0.8))
+                        fig.update_layout(height=500, title=f"{metric} by {cond_col}",
+                                          xaxis_title=cond_col, **_FONT)
+                        st.plotly_chart(fig, use_container_width=True)
                     else:
-                        fig = px.strip(df_plot, x="Condition", y=metric,
-                                       hover_data=["ID"], color="Condition",
-                                       template="plotly_white")
-                        fig.update_traces(marker=dict(size=10, opacity=0.8))
-                    fig.update_layout(height=500, title=f"{metric} by {cond_col}",
-                                      xaxis_title=cond_col, **_FONT)
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("No matching data for plot.")
+                        st.warning("No matching data for plot.")
+            _tab_box()
 
         with tab_summary:
-            summary_rows = []
-            for sid in all_ids:
-                if sid not in condition_map:
-                    continue
-                row = {
-                    "ID": sid,
-                    "Condition": condition_map.get(sid, ""),
-                    "Rounds": len(exp[sid]["Rounds"]),
-                    "Max Time (h)": f"{exp[sid]['Times'][-1]:.1f}" if len(exp[sid]['Times']) > 0 else "",
-                    "PL Peak Init.": f"{exp[sid]['PL Peak Intensity'][0]:.2f}",
-                    "PL Peak Final": f"{exp[sid]['PL Peak Intensity'][-1]:.2f}",
-                    "BES Final": f"{exp[sid]['R_slopes (norm.)'][-1]:.3f}",
-                    "SWS Final": f"{exp[sid]['Short-Wavelength Step'][-1]:.3f}",
-                }
-                summary_rows.append(row)
-            if summary_rows:
-                st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
-            else:
-                st.info("No cells matched to conditions.")
+            @st.fragment
+            def _tab_summary():
+                summary_rows = []
+                for sid in all_ids:
+                    if sid not in condition_map:
+                        continue
+                    row = {
+                        "ID": sid,
+                        "Condition": condition_map.get(sid, ""),
+                        "Rounds": len(exp[sid]["Rounds"]),
+                        "Max Time (h)": f"{exp[sid]['Times'][-1]:.1f}" if len(exp[sid]['Times']) > 0 else "",
+                        "PL Peak Init.": f"{exp[sid]['PL Peak Intensity'][0]:.2f}",
+                        "PL Peak Final": f"{exp[sid]['PL Peak Intensity'][-1]:.2f}",
+                        "BES Final": f"{exp[sid]['R_slopes (norm.)'][-1]:.3f}",
+                        "SWS Final": f"{exp[sid]['Short-Wavelength Step'][-1]:.3f}",
+                    }
+                    summary_rows.append(row)
+                if summary_rows:
+                    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
+                else:
+                    st.info("No cells matched to conditions.")
+            _tab_summary()
 
 elif plot_category == "Correlations":
     def _cell_metrics(sid):
@@ -966,12 +991,12 @@ elif plot_category == "Correlations":
     )
     metric_cols = [c for c in metrics_df.columns if c not in ("ID", "Condition")]
 
+    excluded_corr = cell_selector("corr_exclude", [], label="Exclude IDs")
     col1, col2 = st.columns([1, 3])
     with col1:
         x_metric = st.selectbox("X axis", metric_cols, index=0, key="corr_x")
         y_metric = st.selectbox("Y axis", metric_cols, index=1, key="corr_y")
         color_by = st.radio("Color by", ["Cell ID", "Condition"], key="corr_color", horizontal=True)
-        excluded_corr = st.multiselect("Exclude IDs", all_ids, key="corr_exclude")
     with col2:
         df_plot = metrics_df[~metrics_df["ID"].isin(excluded_corr)].dropna(subset=[x_metric, y_metric])
         color_col = "Condition" if color_by == "Condition" else "ID"
