@@ -416,29 +416,38 @@ if df_conditions is not None:
 SUBSTRATE_COLS, SUBSTRATE_ROWS = 7, 7  # HITSTA substrate: 1-7 on the top row, 43-49 on the bottom
 
 
-def cell_selector(key, default, label="Cells"):
-    """Pick cells on a grid laid out like the HITSTA substrate; selected cells are highlighted."""
+def cell_selector(key, default, label="Cells", multi=True):
+    """Pick cells on a grid laid out like the HITSTA substrate; selected cells are highlighted.
+
+    multi=True returns a list of IDs; multi=False returns the single chosen ID.
+    """
     if key not in st.session_state:
-        st.session_state[key] = list(default)
+        st.session_state[key] = list(default) if multi else default
 
     def _set(value):
         st.session_state[key] = list(value)
 
     def _toggle(sid):
+        if not multi:
+            st.session_state[key] = sid
+            return
         sel = st.session_state[key]
         st.session_state[key] = [s for s in sel if s != sid] if sid in sel else sel + [sid]
 
-    selected = st.session_state[key]
+    selected = st.session_state[key] if multi else [st.session_state[key]]
     grid_ids = [f"ID{n}" for n in range(1, SUBSTRATE_COLS * SUBSTRATE_ROWS + 1)]
     extra_ids = [sid for sid in all_ids if sid not in grid_ids]
     rows = [grid_ids[r * SUBSTRATE_COLS:(r + 1) * SUBSTRATE_COLS] for r in range(SUBSTRATE_ROWS)]
     rows += [extra_ids[k:k + SUBSTRATE_COLS] for k in range(0, len(extra_ids), SUBSTRATE_COLS)]
 
     with st.container(key=f"grid_{key}"):
-        st.markdown(f"**{label}** · {len(selected)} selected")
-        b1, b2 = st.columns(2)
-        b1.button("Select all", key=f"{key}_btn_all", on_click=_set, args=(all_ids,), use_container_width=True)
-        b2.button("Clear", key=f"{key}_btn_none", on_click=_set, args=([],), use_container_width=True)
+        if multi:
+            st.markdown(f"**{label}** · {len(selected)} selected")
+            b1, b2 = st.columns(2)
+            b1.button("Select all", key=f"{key}_btn_all", on_click=_set, args=(all_ids,), use_container_width=True)
+            b2.button("Clear", key=f"{key}_btn_none", on_click=_set, args=([],), use_container_width=True)
+        else:
+            st.markdown(f"**{label}** · {get_label(selected[0])}")
         for row in rows:
             for col, sid in zip(st.columns(SUBSTRATE_COLS), row):
                 col.button(sid.removeprefix("ID"), key=f"{key}_btn_{sid}",
@@ -446,6 +455,8 @@ def cell_selector(key, default, label="Cells"):
                            disabled=sid not in all_ids,
                            help=get_label(sid) if sid in condition_map else None,
                            on_click=_toggle, args=(sid,), use_container_width=True)
+    if not multi:
+        return selected[0]
     return [sid for sid in all_ids if sid in selected]
 
 
@@ -542,7 +553,7 @@ if plot_category == "Reflectance":
         def _tab_single():
             col1, col2 = st.columns([1, 3])
             with col1:
-                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="r_single_cell")
+                selected_id = cell_selector("r_single_cell", all_ids[min(2, len(all_ids)-1)], label="Cell", multi=False)
                 max_round = int(exp[selected_id]["Rounds"][-1]) if len(exp[selected_id]["Rounds"]) > 0 else 0
                 round_range = st.slider("Round range", 0, max_round, (0, max_round), key="r_single_rr")
                 wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_single_wl_min")
@@ -680,7 +691,7 @@ elif plot_category == "PL":
         def _tab_single():
             col1, col2 = st.columns([1, 3])
             with col1:
-                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_single_cell")
+                selected_id = cell_selector("pl_single_cell", all_ids[min(2, len(all_ids)-1)], label="Cell", multi=False)
                 wl_min = st.number_input("WL min (nm)", value=600, step=10, key="pl_single_wl_min")
                 wl_max = st.number_input("WL max (nm)", value=900, step=10, key="pl_single_wl_max")
                 wl_range = (wl_min, wl_max)
@@ -888,7 +899,7 @@ elif plot_category == "PL":
         def _tab_twin():
             col1, col2 = st.columns([1, 3])
             with col1:
-                selected_id = st.selectbox("Cell", all_ids, index=min(2, len(all_ids)-1), key="pl_twin_cell")
+                selected_id = cell_selector("pl_twin_cell", all_ids[min(2, len(all_ids)-1)], label="Cell", multi=False)
                 skip_range = _time_skip_ui("pl_twin")
             with col2:
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
