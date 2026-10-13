@@ -568,6 +568,8 @@ if plot_category == "Reflectance":
                 y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
                 y_range = (y_min, y_max_val)
                 smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=1, step=1, key="r_single_smooth")
+                fig_width = st.slider("Figure width (px)", 400, 1400, 650, step=50, key="r_single_fig_w",
+                                      help="Narrower plots make the band edge look steeper")
                 show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
                 skip_range = _time_skip_ui("r_single")
             with col2:
@@ -599,8 +601,8 @@ if plot_category == "Reflectance":
                     xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                     xaxis_range=list(wl_range), yaxis_range=list(y_range),
                     height=500, template="plotly_white",
-                    title=f"Reflectance - {get_label(selected_id)}", **_FONT)
-                st.plotly_chart(fig, use_container_width=True)
+                    title=f"Reflectance - {get_label(selected_id)}", width=fig_width, **_FONT)
+                st.plotly_chart(fig, use_container_width=False)
         _tab_single()
 
     with tab_multi:
@@ -617,6 +619,8 @@ if plot_category == "Reflectance":
                 y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
                 y_range = (y_min, y_max_val)
                 smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=1, step=1, key="r_multi_smooth")
+                fig_width = st.slider("Figure width (px)", 400, 1400, 650, step=50, key="r_multi_fig_w",
+                                      help="Narrower plots make the band edge look steeper")
             with col2:
                 colors = get_colors(len(selected_ids))
                 fig = go.Figure()
@@ -634,8 +638,8 @@ if plot_category == "Reflectance":
                     xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                     xaxis_range=list(wl_range), yaxis_range=list(y_range),
                     height=500, template="plotly_white",
-                    title=f"Reflectance comparison - Round {int(round_num)}", **_FONT)
-                st.plotly_chart(fig, use_container_width=True)
+                    title=f"Reflectance comparison - Round {int(round_num)}", width=fig_width, **_FONT)
+                st.plotly_chart(fig, use_container_width=False)
         _tab_multi()
 
     with tab_bes:
