@@ -329,6 +329,15 @@ st.markdown("""<style>
 [class*="st-key-grid_"] [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0 !important; }
 [class*="st-key-grid_"] { gap: 0.2rem; }
 [class*="st-key-grid_"] button { padding: 0 0.1rem; min-height: 2rem; }
+/* Reference cells: ID1 = black reference, ID2 = white reference */
+[class*="_refblack"] button { background: #1B1F24 !important; color: #FFFFFF !important; border: 2px solid #1B1F24 !important; }
+[class*="_refwhite"] button { background: #FFFFFF !important; color: #1B1F24 !important; border: 2px solid #1B1F24 !important; }
+[class*="_refblack"] button[data-testid="stBaseButton-primary"],
+[class*="_refwhite"] button[data-testid="stBaseButton-primary"] { box-shadow: 0 0 0 3px var(--primary-color, #2B5C8A); }
+[class*="st-key-narrowplot_"] { align-items: center; }
+.ref-legend { font-size: 0.78rem; color: #6B7785; margin-top: 0.2rem; }
+.ref-legend .sw { display: inline-block; width: 0.8rem; height: 0.8rem; border: 1.5px solid #1B1F24;
+                  border-radius: 0.15rem; vertical-align: -0.1rem; margin-right: 0.25rem; }
 
 /* Header and analysis switcher */
 .hitsta-eyebrow { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
@@ -414,6 +423,7 @@ if df_conditions is not None:
 
 
 SUBSTRATE_COLS, SUBSTRATE_ROWS = 7, 7  # HITSTA substrate: 1-7 on the top row, 43-49 on the bottom
+REFERENCE_CELLS = {"ID1": ("refblack", "black reference"), "ID2": ("refwhite", "white reference")}
 
 
 def cell_selector(key, default, label="Cells", multi=True):
@@ -450,11 +460,16 @@ def cell_selector(key, default, label="Cells", multi=True):
             st.markdown(f"**{label}** · {get_label(selected[0])}")
         for row in rows:
             for col, sid in zip(st.columns(SUBSTRATE_COLS), row):
-                col.button(sid.removeprefix("ID"), key=f"{key}_btn_{sid}",
+                ref = REFERENCE_CELLS.get(sid)
+                help_txt = f"{sid} · {ref[1]}" if ref else (get_label(sid) if sid in condition_map else None)
+                col.button(sid.removeprefix("ID"), key=f"{key}_btn_{sid}" + (f"_{ref[0]}" if ref else ""),
                            type="primary" if sid in selected else "secondary",
                            disabled=sid not in all_ids,
-                           help=get_label(sid) if sid in condition_map else None,
+                           help=help_txt,
                            on_click=_toggle, args=(sid,), use_container_width=True)
+        st.markdown('<div class="ref-legend"><span class="sw" style="background:#1B1F24"></span>1 black ref'
+                    ' &nbsp; <span class="sw" style="background:#FFFFFF"></span>2 white ref'
+                    ' &nbsp; ring = selected</div>', unsafe_allow_html=True)
     if not multi:
         return selected[0]
     return [sid for sid in all_ids if sid in selected]
@@ -602,7 +617,8 @@ if plot_category == "Reflectance":
                     xaxis_range=list(wl_range), yaxis_range=list(y_range),
                     height=500, template="plotly_white",
                     title=f"Reflectance - {get_label(selected_id)}", width=fig_width, **_FONT)
-                st.plotly_chart(fig, use_container_width=False)
+                with st.container(key="narrowplot_r_single"):
+                    st.plotly_chart(fig, use_container_width=False)
         _tab_single()
 
     with tab_multi:
@@ -639,7 +655,8 @@ if plot_category == "Reflectance":
                     xaxis_range=list(wl_range), yaxis_range=list(y_range),
                     height=500, template="plotly_white",
                     title=f"Reflectance comparison - Round {int(round_num)}", width=fig_width, **_FONT)
-                st.plotly_chart(fig, use_container_width=False)
+                with st.container(key="narrowplot_r_multi"):
+                    st.plotly_chart(fig, use_container_width=False)
         _tab_multi()
 
     with tab_bes:
