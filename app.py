@@ -323,7 +323,26 @@ def import_HITSTA(file_contents_list, _version=5):
 # ── Streamlit App ──────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="HITSTA Analysis", layout="wide")
-st.title("HITSTA Interactive Analysis")
+# Compact, non-wrapping button grid for the substrate cell selector
+st.markdown("""<style>
+[class*="st-key-grid_"] [data-testid="stHorizontalBlock"] { gap: 0.2rem; flex-wrap: nowrap; }
+[class*="st-key-grid_"] [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0 !important; }
+[class*="st-key-grid_"] { gap: 0.2rem; }
+[class*="st-key-grid_"] button { padding: 0 0.1rem; min-height: 2rem; }
+
+/* Header and analysis switcher */
+.hitsta-eyebrow { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+                  color: #6B7785; margin-bottom: -0.4rem; }
+.st-key-analysis_nav button { min-height: 3.4rem; border-radius: 0.6rem; }
+.st-key-analysis_nav button p { font-size: 1.05rem; font-weight: 600; }
+.hitsta-banner { border: 1px solid #E3E7EC; border-left: 4px solid var(--primary-color, #2B5C8A);
+                 border-radius: 0.5rem; padding: 0.8rem 1.1rem; margin: 0.4rem 0 1rem 0; }
+.hitsta-banner h3 { margin: 0; padding: 0; font-size: 1.35rem; font-weight: 650; }
+.hitsta-banner p { margin: 0.2rem 0 0 0; color: #5A6573; font-size: 0.95rem; }
+.hitsta-banner .meta { font-size: 0.8rem; color: #8A94A0; letter-spacing: 0.04em; margin-top: 0.35rem; }
+</style>""", unsafe_allow_html=True)
+st.markdown('<div class="hitsta-eyebrow">HITSTA · high-throughput stability analysis</div>', unsafe_allow_html=True)
+st.title("Interactive Analysis")
 
 # ── Sidebar: Data Loading ──
 st.sidebar.header("1. Load Data Files")
@@ -341,7 +360,7 @@ condition_file = st.sidebar.file_uploader(
 df_conditions = None
 if condition_file:
     df_conditions = pd.read_excel(condition_file)
-    st.sidebar.success(f"Loaded {len(df_conditions)} rows")
+    st.sidebar.caption(f"Loaded {len(df_conditions)} rows")
 
 # ── Process data ──
 if not uploaded:
@@ -365,7 +384,7 @@ if not exp:
 all_ids = list(exp.keys())
 default_ids = [sid for sid in all_ids if sid not in ("ID1", "ID2")][:5]
 
-st.sidebar.success(f"Loaded {len(all_ids)} cells: {', '.join(all_ids)}")
+st.sidebar.caption(f"{len(all_ids)} cells loaded: {', '.join(all_ids)}")
 
 # ── Build condition lookup ──
 condition_map = {}
@@ -391,21 +410,42 @@ if df_conditions is not None:
             continue
         id_key = f"ID{int(row[hitsta_col])}" if not str(row[hitsta_col]).startswith("ID") else str(row[hitsta_col])
         condition_map[id_key] = str(row[cond_col])
-    st.sidebar.success(f"Mapped {len(condition_map)} cells to conditions")
+    st.sidebar.caption(f"Mapped {len(condition_map)} cells to conditions")
+
+
+SUBSTRATE_COLS, SUBSTRATE_ROWS = 7, 7  # HITSTA substrate: 1-7 on the top row, 43-49 on the bottom
 
 
 def cell_selector(key, default, label="Cells"):
-    """Full-width toggle pills for picking cells, with Select all / Clear buttons."""
+    """Pick cells on a grid laid out like the HITSTA substrate; selected cells are highlighted."""
     if key not in st.session_state:
         st.session_state[key] = list(default)
 
     def _set(value):
         st.session_state[key] = list(value)
 
-    b1, b2, _ = st.columns([1, 1, 8])
-    b1.button("Select all", key=f"{key}_btn_all", on_click=_set, args=(all_ids,))
-    b2.button("Clear", key=f"{key}_btn_none", on_click=_set, args=([],))
-    selected = st.pills(label, all_ids, selection_mode="multi", key=key) or []
+    def _toggle(sid):
+        sel = st.session_state[key]
+        st.session_state[key] = [s for s in sel if s != sid] if sid in sel else sel + [sid]
+
+    selected = st.session_state[key]
+    grid_ids = [f"ID{n}" for n in range(1, SUBSTRATE_COLS * SUBSTRATE_ROWS + 1)]
+    extra_ids = [sid for sid in all_ids if sid not in grid_ids]
+    rows = [grid_ids[r * SUBSTRATE_COLS:(r + 1) * SUBSTRATE_COLS] for r in range(SUBSTRATE_ROWS)]
+    rows += [extra_ids[k:k + SUBSTRATE_COLS] for k in range(0, len(extra_ids), SUBSTRATE_COLS)]
+
+    with st.container(key=f"grid_{key}"):
+        st.markdown(f"**{label}** · {len(selected)} selected")
+        b1, b2 = st.columns(2)
+        b1.button("Select all", key=f"{key}_btn_all", on_click=_set, args=(all_ids,), use_container_width=True)
+        b2.button("Clear", key=f"{key}_btn_none", on_click=_set, args=([],), use_container_width=True)
+        for row in rows:
+            for col, sid in zip(st.columns(SUBSTRATE_COLS), row):
+                col.button(sid.removeprefix("ID"), key=f"{key}_btn_{sid}",
+                           type="primary" if sid in selected else "secondary",
+                           disabled=sid not in all_ids,
+                           help=get_label(sid) if sid in condition_map else None,
+                           on_click=_toggle, args=(sid,), use_container_width=True)
     return [sid for sid in all_ids if sid in selected]
 
 
@@ -416,9 +456,41 @@ def get_label(id_str):
     return id_str
 
 
-# ── Plot Selection ──
-st.sidebar.header("3. Plot Category")
-plot_category = st.sidebar.radio("Category", ["Reflectance", "PL", "Conditions", "Correlations"], horizontal=True)
+# ── Analysis Selection ──
+ANALYSES = {
+    "Reflectance": (":material/light_mode:", "White-light reflectance",
+                    "Transflectance spectra under white-light illumination: band edge, "
+                    "band-edge slope and spectral self-similarity over time."),
+    "PL": (":material/flare:", "Photoluminescence (PL)",
+           "Laser-excited emission spectra: Gaussian peak fits, peak intensity, "
+           "bandgap and spectral self-similarity over time."),
+    "Conditions": (":material/category:", "By condition",
+                   "Final metrics grouped by the experimental conditions from the runsheet."),
+    "Correlations": (":material/scatter_plot:", "Correlations",
+                     "Relate per-cell metrics to each other and rank Pearson correlations."),
+}
+if "plot_category" not in st.session_state:
+    st.session_state["plot_category"] = "Reflectance"
+
+
+def _set_category(name):
+    st.session_state["plot_category"] = name
+
+
+with st.container(key="analysis_nav"):
+    for nav_col, (name, (icon, title, _)) in zip(st.columns(len(ANALYSES)), ANALYSES.items()):
+        nav_col.button(title, icon=icon, key=f"nav_{name}", use_container_width=True,
+                       type="primary" if st.session_state["plot_category"] == name else "secondary",
+                       on_click=_set_category, args=(name,))
+
+plot_category = st.session_state["plot_category"]
+_icon, _title, _desc = ANALYSES[plot_category]
+_n_files = len(uploaded)
+st.markdown(
+    f'<div class="hitsta-banner"><h3>{_title}</h3><p>{_desc}</p>'
+    f'<div class="meta">{len(all_ids)} CELLS · {_n_files} FILE{"S" if _n_files != 1 else ""}'
+    f'{" · " + str(len(condition_map)) + " MAPPED TO CONDITIONS" if condition_map else ""}</div></div>',
+    unsafe_allow_html=True)
 
 
 # ── Color palette ──
@@ -479,7 +551,7 @@ if plot_category == "Reflectance":
                 y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_single_yr_min")
                 y_max_val = st.number_input("Y max", value=0.8, step=0.05, format="%.2f", key="r_single_yr_max")
                 y_range = (y_min, y_max_val)
-                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_single_smooth")
+                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=1, step=1, key="r_single_smooth")
                 show_bandedge = st.checkbox("Show band-edge points", value=False, key="r_single_be")
             with col2:
                 rounds_to_plot = range(round_range[0], round_range[1] + 1)
@@ -517,9 +589,9 @@ if plot_category == "Reflectance":
     with tab_multi:
         @st.fragment
         def _tab_multi():
-            selected_ids = cell_selector("r_multi_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("r_multi_cells", default_ids)
                 round_num = st.number_input("Round", min_value=0, value=0, key="r_multi_rnd")
                 wl_min = st.number_input("WL min (nm)", value=700, step=10, key="r_multi_wl_min")
                 wl_max = st.number_input("WL max (nm)", value=850, step=10, key="r_multi_wl_max")
@@ -527,7 +599,7 @@ if plot_category == "Reflectance":
                 y_min = st.number_input("Y min", value=0.0, step=0.05, format="%.2f", key="r_multi_yr_min")
                 y_max_val = st.number_input("Y max", value=1.0, step=0.05, format="%.2f", key="r_multi_yr_max")
                 y_range = (y_min, y_max_val)
-                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=5, step=1, key="r_multi_smooth")
+                smooth_sigma = st.number_input("Smoothing (σ)", min_value=0, max_value=50, value=1, step=1, key="r_multi_smooth")
             with col2:
                 colors = get_colors(len(selected_ids))
                 fig = go.Figure()
@@ -552,9 +624,9 @@ if plot_category == "Reflectance":
     with tab_bes:
         @st.fragment
         def _tab_bes():
-            selected_ids = cell_selector("r_bes_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("r_bes_cells", default_ids)
                 normalize = st.checkbox("Normalized", value=True, key="r_bes_norm")
                 skip_range = _time_skip_ui("r_bes")
             with col2:
@@ -578,9 +650,9 @@ if plot_category == "Reflectance":
     with tab_rss:
         @st.fragment
         def _tab_rss():
-            selected_ids = cell_selector("r_rss_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("r_rss_cells", default_ids)
                 skip_range = _time_skip_ui("r_rss")
             with col2:
                 colors = get_colors(len(selected_ids))
@@ -694,9 +766,9 @@ elif plot_category == "PL":
     with tab_multi:
         @st.fragment
         def _tab_multi():
-            selected_ids = cell_selector("pl_multi_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("pl_multi_cells", default_ids)
                 max_round_multi = max((int(exp[sid]["Rounds"][-1]) for sid in selected_ids if len(exp[sid]["Rounds"]) > 0), default=0)
                 round_num = st.slider("Round", 0, max(max_round_multi, 1), 0, key="pl_multi_rnd")
                 if selected_ids:
@@ -789,9 +861,9 @@ elif plot_category == "PL":
     with tab_intensity:
         @st.fragment
         def _tab_intensity():
-            selected_ids = cell_selector("pl_int_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("pl_int_cells", default_ids)
                 skip_range = _time_skip_ui("pl_int")
             with col2:
                 colors = get_colors(len(selected_ids))
@@ -844,9 +916,9 @@ elif plot_category == "PL":
     with tab_pss:
         @st.fragment
         def _tab_pss():
-            selected_ids = cell_selector("pl_pss_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("pl_pss_cells", default_ids)
                 skip_range = _time_skip_ui("pl_pss")
             with col2:
                 colors = get_colors(len(selected_ids))
@@ -867,9 +939,9 @@ elif plot_category == "PL":
     with tab_bandgap:
         @st.fragment
         def _tab_bandgap():
-            selected_ids = cell_selector("pl_bg_cells", default_ids)
             col1, col2 = st.columns([1, 3])
             with col1:
+                selected_ids = cell_selector("pl_bg_cells", default_ids)
                 skip_range = _time_skip_ui("pl_bg")
             with col2:
                 colors = get_colors(len(selected_ids))
@@ -905,9 +977,9 @@ elif plot_category == "Conditions":
         with tab_box:
             @st.fragment
             def _tab_box():
-                excluded = cell_selector("cond_exclude", [], label="Exclude IDs")
                 col1, col2 = st.columns([1, 3])
                 with col1:
+                    excluded = cell_selector("cond_exclude", [], label="Exclude IDs")
                     plot_type = st.radio("Plot type", ["Box", "Scatter"], horizontal=True, key="cond_plot_type")
                     metric = st.selectbox("Metric", [
                         "Band-edge slope (last)",
@@ -1010,9 +1082,9 @@ elif plot_category == "Correlations":
     )
     metric_cols = [c for c in metrics_df.columns if c not in ("ID", "Condition")]
 
-    excluded_corr = cell_selector("corr_exclude", [], label="Exclude IDs")
     col1, col2 = st.columns([1, 3])
     with col1:
+        excluded_corr = cell_selector("corr_exclude", [], label="Exclude IDs")
         x_metric = st.selectbox("X axis", metric_cols, index=0, key="corr_x")
         y_metric = st.selectbox("Y axis", metric_cols, index=1, key="corr_y")
         color_by = st.radio("Color by", ["Cell ID", "Condition"], key="corr_color", horizontal=True)
