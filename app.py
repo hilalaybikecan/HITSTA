@@ -94,6 +94,7 @@ def merge_files(file_contents_list):
     n_sections = min(len(s) for s in all_sections)
 
     merged = {}
+    skipped = []
     for i in range(1, n_sections):
         df_total = None
         IDstring = None
@@ -104,13 +105,13 @@ def merge_files(file_contents_list):
             ID_j, df_j = parse_section(sections[i])
             fname = file_contents_list[j][0]
 
-            if df_total is None:
+            if j == 0:
                 IDstring = ID_j
-            else:
-                if ID_j != IDstring:
-                    raise ValueError(
-                        f"Section {i} is '{IDstring}' in {file_contents_list[0][0]} "
-                        f"but '{ID_j}' in {fname}; files describe different cells.")
+            elif ID_j != IDstring:
+                raise ValueError(
+                    f"Section {i} is '{IDstring}' in {file_contents_list[0][0]} "
+                    f"but '{ID_j}' in {fname}; files describe different cells.")
+            if df_total is not None:
                 if len(df_j.columns) != len(df_total.columns):
                     raise ValueError(
                         f"{IDstring}: {fname} has {len(df_j.columns)} columns but "
@@ -118,8 +119,12 @@ def merge_files(file_contents_list):
                 df_j.columns = df_total.columns
 
             # Elapsed time of the whole run, including a trailing partial round.
-            file_duration = float(df_j["Time (h)"].max())
+            file_duration = float(df_j["Time (h)"].max()) if len(df_j) else 0.0
             df_j = drop_incomplete_rounds(df_j)
+            if df_j.empty:
+                # No round with all of D/W/L (e.g. run stopped during its first round).
+                time_offset += file_duration
+                continue
 
             df_j["Round"] = df_j["Round"].rank(method="dense").astype(int) + round_offset
             df_j["Time (h)"] = df_j["Time (h)"] + time_offset
@@ -128,20 +133,27 @@ def merge_files(file_contents_list):
             round_offset = int(df_total["Round"].max())
             time_offset += file_duration
 
-        merged[IDstring] = df_total
+        if df_total is None:
+            skipped.append(IDstring)
+        else:
+            merged[IDstring] = df_total
 
-    return merged
+    return merged, skipped
 
 
 @st.cache_data(show_spinner="Analysing HITSTA data (only done once per upload)...", max_entries=3)
-def import_HITSTA(file_contents_list, _version=4):
+def import_HITSTA(file_contents_list, _version=5):
     """
     Accepts a list of (filename, file_content_string) tuples.
     Returns a dictionary with keys "ID1", "ID2", etc.
     """
 
+    merged, skipped = merge_files(file_contents_list)
+    if not merged:
+        return {}, skipped
+
     exp = {}
-    for IDstring, df in merge_files(file_contents_list).items():
+    for IDstring, df in merged.items():
         wavelengths = df.columns[4:].to_numpy(dtype=float)
         wavelengths = np.linspace(min(wavelengths), max(wavelengths), len(wavelengths))
 
@@ -305,7 +317,7 @@ def import_HITSTA(file_contents_list, _version=4):
         exp[IDstring]["BES Final"] = exp[IDstring]["R_slopes (norm.)"][-1]
         exp[IDstring]["SWS Final"] = exp[IDstring]["Short-Wavelength Step"][-1]
 
-    return exp
+    return exp, skipped
 
 
 # ── Streamlit App ──────────────────────────────────────────────────────────────
@@ -341,9 +353,15 @@ if not uploaded:
 files_sig = tuple((f.name, f.size, f.file_id) for f in uploaded)
 if st.session_state.get("_files_sig") != files_sig:
     uploaded_files = [(f.name, f.getvalue().decode("utf-8", errors="ignore")) for f in uploaded]
-    st.session_state["_exp"] = import_HITSTA(uploaded_files)
+    st.session_state["_exp"], st.session_state["_skipped"] = import_HITSTA(uploaded_files)
     st.session_state["_files_sig"] = files_sig
 exp = st.session_state["_exp"]
+if st.session_state["_skipped"]:
+    st.sidebar.warning("Skipped (no complete D/W/L round in the uploaded files): "
+                       + ", ".join(st.session_state["_skipped"]))
+if not exp:
+    st.error("None of the cells in the uploaded files has a complete measurement round (D, W and L).")
+    st.stop()
 all_ids = list(exp.keys())
 default_ids = [sid for sid in all_ids if sid not in ("ID1", "ID2")][:5]
 
