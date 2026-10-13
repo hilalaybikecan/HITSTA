@@ -479,13 +479,13 @@ if plot_category == "Reflectance":
                             x=wl_arr,
                             y=refl_y,
                             mode='lines', name=f"Round {int(rnd)}",
-                            line=dict(color=colors[i], width=2.5)))
+                            line=dict(color=colors[i], width=3.5)))
                         if show_bandedge:
                             fig.add_trace(go.Scatter(
                                 x=[be_wl], y=[exp[selected_id]["Reflectance"][rnd][be_idx]],
                                 mode='markers',
-                                marker=dict(color='black', size=9, symbol='circle-open',
-                                            line=dict(width=2.5)),
+                                marker=dict(color='black', size=13, symbol='circle-open',
+                                            line=dict(width=3.5)),
                                 showlegend=False,
                                 hovertemplate=f"Round {int(rnd)}: {exp[selected_id]['Reflectance'][rnd][be_idx]:.3f}<extra></extra>"))
                 fig.update_layout(
@@ -522,7 +522,7 @@ if plot_category == "Reflectance":
                         x=exp[sid]["Wavelengths"],
                         y=refl_y,
                         mode='lines', name=get_label(sid),
-                        line=dict(color=colors[i], width=2.5)))
+                        line=dict(color=colors[i], width=3.5)))
                 fig.update_layout(
                     xaxis_title="Wavelength (nm)", yaxis_title="Transflectance",
                     xaxis_range=list(wl_range), yaxis_range=list(y_range),
@@ -548,8 +548,8 @@ if plot_category == "Reflectance":
                     fig.add_trace(go.Scatter(
                         x=t, y=y,
                         mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.75),
-                        marker=dict(size=4)))
+                        line=dict(color=colors[i], width=3),
+                        marker=dict(size=8, symbol='circle')))
                 fig.update_layout(
                     xaxis_title="Time (h)", yaxis_title="Band-edge slope",
                     height=500, template="plotly_white",
@@ -572,7 +572,7 @@ if plot_category == "Reflectance":
                     fig.add_trace(go.Scatter(
                         x=t, y=y,
                         mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
+                        line=dict(color=colors[i], width=3), marker=dict(size=8, symbol='circle')))
                 fig.update_layout(
                     xaxis_title="Time (h)", yaxis_title="R Self-Similarity",
                     height=500, template="plotly_white",
@@ -628,17 +628,17 @@ elif plot_category == "PL":
                         fig.add_trace(go.Scatter(
                             x=wl, y=y_data,
                             mode='lines', name=f"Round {int(rnd)}",
-                            line=dict(color=colors[i], width=1.5)))
+                            line=dict(color=colors[i], width=3)))
                         if show_fit and rnd < len(exp[selected_id]["PL Fitted"]) and exp[selected_id]["PL Fitted"][rnd] is not None:
                             fig.add_trace(go.Scatter(
                                 x=wl, y=exp[selected_id]["PL Fitted"][rnd],
                                 mode='lines', name=f"Fit {int(rnd)}",
-                                line=dict(color=colors[i], width=1.5, dash='dash'),
+                                line=dict(color=colors[i], width=3, dash='dash'),
                                 showlegend=False))
                 cur = min(round_idx, n_rounds - 1)
                 if show_peak_wl and peak_wls[cur] > 0:
                     fig.add_vline(x=peak_wls[cur], line_dash="dash",
-                                  line_color="red", line_width=1.5,
+                                  line_color="red", line_width=3,
                                   annotation_text=f"{peak_wls[cur]:.1f} nm",
                                   annotation_position="top right")
                 layout_kwargs = dict(
@@ -657,11 +657,11 @@ elif plot_category == "PL":
                 fig2 = go.Figure()
                 fig2.add_trace(go.Scatter(
                     x=times, y=peak_wls, mode='lines+markers',
-                    line=dict(color='#555', width=1.5), marker=dict(size=4),
+                    line=dict(color='#555', width=3), marker=dict(size=8, symbol='circle'),
                     name="PL Peak Wavelength"))
                 fig2.add_trace(go.Scatter(
                     x=[t_current], y=[peak_wls[cur]],
-                    mode='markers', marker=dict(size=12, color='red', symbol='circle'),
+                    mode='markers', marker=dict(size=16, color='red', symbol='circle'),
                     showlegend=False,
                     hovertemplate=f"Round {int(exp[selected_id]['Rounds'][cur])}: "
                                   f"{peak_wls[cur]:.1f} nm<extra></extra>"))
@@ -710,19 +710,19 @@ elif plot_category == "PL":
                         x=exp[sid]["Wavelengths"],
                         y=y_data,
                         mode='lines', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.5)))
+                        line=dict(color=colors[i], width=3)))
                     if show_fit and rnd < len(exp[sid]["PL Fitted"]) and exp[sid]["PL Fitted"][rnd] is not None:
                         fig.add_trace(go.Scatter(
                             x=exp[sid]["Wavelengths"],
                             y=exp[sid]["PL Fitted"][rnd],
                             mode='lines', name=f"{get_label(sid)} fit",
-                            line=dict(color=colors[i], width=1.5, dash='dash'),
+                            line=dict(color=colors[i], width=3, dash='dash'),
                             showlegend=False))
                     if show_fit_peak and rnd < len(exp[sid]["PL Fit Parameters"]):
                         peak_nm = exp[sid]["PL Fit Parameters"][rnd, 1]
                         if not np.isnan(peak_nm) and peak_nm > 0:
                             fig.add_vline(x=peak_nm, line_color=colors[i],
-                                          line_dash="dot", line_width=1.5,
+                                          line_dash="dot", line_width=3,
                                           annotation_text=f"{peak_nm:.1f}",
                                           annotation_font_color=colors[i],
                                           annotation_position="top left")
@@ -747,7 +747,7 @@ elif plot_category == "PL":
                                            skip_range=skip_range)
                     fig2.add_trace(go.Scatter(
                         x=t, y=y, mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.5), marker=dict(size=3)))
+                        line=dict(color=colors[i], width=3), marker=dict(size=8, symbol='circle')))
                     if show_fit_peak:
                         fit_peak = exp[sid]["PL Fit Parameters"][:cutoff, 1]
                         t_fit, y_fit = apply_time_skip(exp[sid]["Times"][:cutoff], fit_peak,
@@ -757,7 +757,7 @@ elif plot_category == "PL":
                             fig2.add_trace(go.Scatter(
                                 x=t_fit[valid], y=y_fit[valid],
                                 mode='lines', name=f"{get_label(sid)} fit peak",
-                                line=dict(color=colors[i], width=1.5, dash='dot'),
+                                line=dict(color=colors[i], width=3, dash='dot'),
                                 showlegend=False))
                 fig2.update_layout(
                     xaxis_title="Time (h)", yaxis_title="Peak Wavelength (nm)",
@@ -784,8 +784,8 @@ elif plot_category == "PL":
                         fig.add_trace(go.Scatter(
                             x=t, y=y,
                             mode='lines+markers', name=get_label(sid),
-                            line=dict(color=colors[i], width=2),
-                            marker=dict(size=4)))
+                            line=dict(color=colors[i], width=3),
+                            marker=dict(size=8, symbol='circle')))
                 fig.update_layout(
                     xaxis_title="Time (h)", yaxis_title="PL Peak Intensity",
                     height=500, template="plotly_white",
@@ -806,14 +806,14 @@ elif plot_category == "PL":
                 fig.add_trace(go.Scatter(
                     x=t_bes, y=y_bes,
                     mode='lines+markers', name="Band-edge slope",
-                    line=dict(color='#800000', width=1.75), marker=dict(size=3)),
+                    line=dict(color='#800000', width=3), marker=dict(size=8, symbol='circle')),
                     secondary_y=False)
                 if exp[selected_id]["PL Fit Parameters"][0, 0] > 0:
                     t_pl, y_pl = apply_time_skip(exp[selected_id]["Times"], exp[selected_id]["PL Fit Parameters"][:, 0], skip_range=skip_range)
                     fig.add_trace(go.Scatter(
                         x=t_pl, y=y_pl,
                         mode='lines+markers', name="PL Peak Intensity",
-                        line=dict(color='#01153E', width=1.5), marker=dict(size=3)),
+                        line=dict(color='#01153E', width=3), marker=dict(size=8, symbol='circle')),
                         secondary_y=True)
                 fig.update_yaxes(title_text="Band-edge slope", secondary_y=False, color='#800000')
                 fig.update_yaxes(title_text="PL Peak Intensity", secondary_y=True, color='#01153E')
@@ -838,7 +838,7 @@ elif plot_category == "PL":
                     fig.add_trace(go.Scatter(
                         x=t, y=y,
                         mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.75), marker=dict(size=3)))
+                        line=dict(color=colors[i], width=3), marker=dict(size=8, symbol='circle')))
                 fig.update_layout(
                     xaxis_title="Time (h)", yaxis_title="PL Self-Similarity",
                     height=500, template="plotly_white",
@@ -868,8 +868,8 @@ elif plot_category == "PL":
                     fig.add_trace(go.Scatter(
                         x=t, y=bg,
                         mode='lines+markers', name=get_label(sid),
-                        line=dict(color=colors[i], width=1.75),
-                        marker=dict(size=3)))
+                        line=dict(color=colors[i], width=3),
+                        marker=dict(size=8, symbol='circle')))
                 fig.update_layout(
                     xaxis_title="Time (h)", yaxis_title="Bandgap (eV)",
                     height=500, template="plotly_white",
@@ -924,11 +924,12 @@ elif plot_category == "Conditions":
                         if plot_type == "Box":
                             fig = px.box(df_plot, x="Condition", y=metric, points="all",
                                          hover_data=["ID"], template="plotly_white")
+                            fig.update_traces(marker=dict(size=10), line=dict(width=3))
                         else:
                             fig = px.strip(df_plot, x="Condition", y=metric,
                                            hover_data=["ID"], color="Condition",
                                            template="plotly_white")
-                            fig.update_traces(marker=dict(size=10, opacity=0.8))
+                            fig.update_traces(marker=dict(size=14, opacity=0.8))
                         fig.update_layout(height=500, title=f"{metric} by {cond_col}",
                                           xaxis_title=cond_col, **_FONT)
                         st.plotly_chart(fig, use_container_width=True)
@@ -1008,7 +1009,7 @@ elif plot_category == "Correlations":
             template="plotly_white", height=550,
             title=f"{y_metric}  vs  {x_metric}"
         )
-        fig.update_traces(textposition="top center", marker=dict(size=10))
+        fig.update_traces(textposition="top center", marker=dict(size=14))
         fig.update_layout(xaxis_title=x_metric, yaxis_title=y_metric, **_FONT)
         st.plotly_chart(fig, use_container_width=True)
 
